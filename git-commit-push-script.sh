@@ -5,7 +5,7 @@ source ~/.bash_profile
 git add -A
 
 # Extract ticket number from current directory
-ticket=$(pwd | grep -oE "CRS-[0-9]+" | head -n 1)
+ticket=$(echo $base_branch | grep -o -E '([A-Za-z]+-[0-9]{3,}|[A-Za-z]+-[0-9]{3,})')
 
 # Prompt for commit message
 read -p "Enter commit message: " message
