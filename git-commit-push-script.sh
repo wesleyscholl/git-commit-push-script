@@ -16,4 +16,3 @@ git commit -S -m "$ticket - $message"
 
 # Push changes
 git push
-
