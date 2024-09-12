@@ -10,7 +10,8 @@ git add -A
 ticket=$(pwd | grep -oE "CRS-[0-9]+" | head -n 1)
 
 # Prompt for commit message
-read -p "Enter commit message: " message
+echo -n "Enter commit message: "
+read message
 
 # Prepare and execute commit command
 git commit -S -m "$ticket - $message"
