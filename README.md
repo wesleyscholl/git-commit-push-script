@@ -1,1 +1,2 @@
-# git-commit-push-script
+# git-commit-push-script - Automating commit and push to GitHub
+
