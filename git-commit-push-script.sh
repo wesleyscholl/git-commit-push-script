@@ -1,4 +1,5 @@
 #!/bin/bash
+source ~/.bash_profile
 
 # Add all changes
 git add -A
