@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Create the alias
-alias cm='
-
 # Add all changes
 git add -A
 
@@ -20,4 +17,4 @@ git commit -S -m "$ticket - $message"
 
 # Push changes
 git push
-'
+
