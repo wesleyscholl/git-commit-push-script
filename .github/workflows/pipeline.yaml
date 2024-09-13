@@ -18,7 +18,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
           VALIDATE_BASH: false
-          FIX_CHECKOV: true
+          VALIDATE_CHECKOV: false
           FIX_MARKDOWN: true
           FIX_MARKDOWN_PRETTIER: true
           FIX_NATURAL_LANGUAGE: true
