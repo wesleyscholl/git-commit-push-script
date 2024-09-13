@@ -38,5 +38,7 @@ jobs:
           from: ${{ github.ref }}
           to: main
           message: Merged to main
+          push_options: '--force'
+          skip_fetch: true
         env:
           GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
