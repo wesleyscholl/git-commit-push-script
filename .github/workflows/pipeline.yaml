@@ -1,5 +1,10 @@
 name: Pipeline
-on: [push]
+on:
+  push:
+    branches:
+      - '**'
+    branches-ignore:
+      - main
 jobs:
   pipeline:
     runs-on: ubuntu-latest
