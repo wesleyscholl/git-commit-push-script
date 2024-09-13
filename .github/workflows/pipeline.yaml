@@ -1,0 +1,57 @@
+name: Pipeline
+on: [push]
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+      statuses: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Super-linter
+        uses: super-linter/super-linter@v7.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
+          VALIDATE_BASH: false
+          VALIDATE_CHECKOV: false
+          FIX_MARKDOWN: true
+          FIX_MARKDOWN_PRETTIER: true
+          FIX_NATURAL_LANGUAGE: true
+          FIX_SHELL_SHFMT: true
+          FIX_YAML_PRETTIER: true
+
+      - name: Commit linting fixes
+        if: github.ref_name != 'main'
+        run: |
+          git config --global user.email "wscholl@totalwine.com"
+          git config --global user.name "Wesley Scholl"
+          git add -A
+          git commit -m "chore: fix linting issues"
+        env:
+          GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
+
+      - name: Commit and push linting fixes
+        if: github.ref_name != 'main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: ${{ github.ref_name }}
+          commit_message: "chore: fix linting issues"
+          commit_user_name: Wesley Scholl
+          commit_user_email: wscholl@totalwine.com
+
+      - name: Merge branch
+        uses: julbme/gh-action-merge-branch@v1
+        with:
+          from: ${{ github.ref_name }}
+          to: main
+          message: Merged to main
+          push_options: '--force'
+          skip_fetch: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
