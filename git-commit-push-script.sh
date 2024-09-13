@@ -12,11 +12,21 @@ ticket=$(echo $base_branch | grep -o -E '([A-Za-z]+-[0-9]{3,}|[A-Za-z]+-[0-9]{3,
 
 # Prompt for commit message
 read -p "Enter commit message: " message
-echo "Commit message: $ticket - $message"
+echo "Commit message: $ticket $message"
 
 # Prepare and execute commit command
-git commit -S -m "$ticket - $message"
+git commit -S -m "$ticket $message"
 
-# Push changes
-git push
+# Check if the branch exists on the remote
+remote_branch=$(git ls-remote --heads origin $base_branch)
+
+if [ -z "$remote_branch" ]; then
+    echo "Branch '$base_branch' does not exist on remote. Creating it."
+    # Push the local branch to the remote, setting the upstream branch
+    git push --set-upstream origin $base_branch
+else
+    echo "Branch '$base_branch' exists on remote. Pushing changes."
+    # Push changes to the remote
+    git push
+fi
 
