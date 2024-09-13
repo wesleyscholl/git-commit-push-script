@@ -32,8 +32,11 @@ jobs:
           commit_message: "chore: fix linting issues"
           commit_user_name: Wesley Scholl
           commit_user_email: wscholl@totalwine.com
-      - id: automerge
-        name: Merge 
-        uses: "pascalgn/automerge-action@v0.16.3"
+      - name: Merge branch
+        uses: julbme/gh-action-merge-branch@v1
+        with:
+          from: ${{ github.ref }}
+          to: main
+          message: Merged to main
         env:
-          GITHUB_TOKEN: "${{ secrets.WF_TOKEN }}"
+          GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
