@@ -35,7 +35,7 @@ jobs:
       - name: Merge branch
         uses: julbme/gh-action-merge-branch@v1
         with:
-          from: ${{ github.ref }}
+          from: ${{ github.ref_name }}
           to: main
           message: Merged to main
           push_options: '--force'
