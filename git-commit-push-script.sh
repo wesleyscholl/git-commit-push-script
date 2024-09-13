@@ -29,4 +29,3 @@ else
     # Push changes to the remote
     git push
 fi
-
