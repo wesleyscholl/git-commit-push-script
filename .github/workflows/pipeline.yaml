@@ -1,13 +1,9 @@
 name: Pipeline
-on:
-  push:
-    branches:
-      - '**'
-    branches-ignore:
-      - main
+on: [push]
 jobs:
   pipeline:
     runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main'
     permissions:
       contents: write
       packages: read
