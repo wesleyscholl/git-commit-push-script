@@ -29,6 +29,8 @@ jobs:
       - name: Commit linting fixes
         if: github.ref_name != 'main'
         run: |
+          git config --global user.email "wscholl@totalwine.com"
+          git config --global user.name "Wesley Scholl"
           git add -A
           git commit -m "chore: fix linting issues"
         env:
