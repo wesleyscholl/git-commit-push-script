@@ -107,7 +107,6 @@ git commit -m "<commit message>"
 If you want to use the -S flag, configure your Git configuration to use the GPG key for signing commits.
 Use the guide here: https://totalwine.atlassian.net/wiki/spaces/TP/pages/3155263556/Setting+up+your+Github+Account#Setting-up-a-GitHub-Signing-Key
 
-
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
