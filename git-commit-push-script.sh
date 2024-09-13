@@ -21,11 +21,11 @@ git commit -S -m "$ticket $message"
 remote_branch=$(git ls-remote --heads origin $base_branch)
 
 if [ -z "$remote_branch" ]; then
-    echo "Branch '$base_branch' does not exist on remote. Creating it."
-    # Push the local branch to the remote, setting the upstream branch
-    git push --set-upstream origin $base_branch
+	echo "Branch '$base_branch' does not exist on remote. Creating it."
+	# Push the local branch to the remote, setting the upstream branch
+	git push --set-upstream origin $base_branch
 else
-    echo "Branch '$base_branch' exists on remote. Pushing changes."
-    # Push changes to the remote
-    git push
+	echo "Branch '$base_branch' exists on remote. Pushing changes."
+	# Push changes to the remote
+	git push
 fi
