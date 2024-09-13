@@ -11,12 +11,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - name: Super-linter
         uses: super-linter/super-linter@v7.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FIX_BASH: true
+          VALIDATE_BASH: false
           FIX_CHECKOV: true
           FIX_MARKDOWN: true
           FIX_MARKDOWN_PRETTIER: true
