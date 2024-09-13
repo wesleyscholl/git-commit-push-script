@@ -75,7 +75,7 @@ cm
 
 7. Enter your commit message when prompted.
 ```shell
-Enter commit message: 
+Enter commit message: <Enter your commit message here>
 ```
 
 8. The script will stage, commit with the ticket prefix, and push the changes to the remote branch.
