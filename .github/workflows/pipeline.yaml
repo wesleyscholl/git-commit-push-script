@@ -15,7 +15,7 @@ jobs:
       - name: Super-linter
         uses: super-linter/super-linter@v7.1.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WF_TOKEN }}
           VALIDATE_BASH: false
           FIX_CHECKOV: true
           FIX_MARKDOWN: true
