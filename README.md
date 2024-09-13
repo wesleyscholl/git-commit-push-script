@@ -94,7 +94,18 @@ To https://github.com/wesleyscholl/git-commit-push-script.git
    c76b73c..be6fe58  CRS-12345-Git-Script-Test -> CRS-12345-Git-Script-Test
 ```
 
-9. Enjoy the script!
+## Troubleshooting
+
+You may encounter an error from the following command because of the `-S` flag:
+```shell
+git commit -S -m "<commit message>" 
+```
+To resolve this error, remove the `-S` from the command in the `git-commit-push-script.sh` file:
+```shell
+git commit -m "<commit message>"
+```
+If you want to use the -S flag, configure your Git configuration to use the GPG key for signing commits.
+Use the guide here: https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
