@@ -27,6 +27,13 @@ commit_message=$(curl -s \
   |  jq -r '.candidates[0].content.parts[0].text'
 )
 
+echo $commit_message
+
+# Clean up commit message - remove #, ```, and any other characters other than A-Z, a-z, 0-9, spaces, and new lines
+commit_message=$(echo "$commit_message" | sed 's/#//g' | sed 's/```//g' | sed 's/[^A-Za-z0-9 \n]//g')
+
+echo $commit_message
+
 # Prepare and execute commit command
 git commit -S -m "$ticket $commit_message"
 
