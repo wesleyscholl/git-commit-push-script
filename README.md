@@ -21,12 +21,6 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 | Git Push                         | Pushing local commits to remote branch with `git push`.                                            |
 | Git Push Retry (Pull & Push)     | If a push fails, the script will `git pull` from the remote branch and push again.                 |
 
-## Alias Command
-
-| Name           | Description                                              |
-| -------------- | -------------------------------------------------------- |
-| Alias Command  | The alias command to be used for the script: `cm`.       |
-
 ## Requirements
 
 | Name                                  | Description                                                                                                             | Link, Location, or Command                                 |
@@ -34,6 +28,7 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 | Terminal or Shell                     | A terminal or shell for configuring and running the script.                                                             | [Download Terminal](https://www.apple.com/macos/terminal/) |
 | `Git Bash` **\*Required for Windows** | Git Bash provides a Unix command line emulator for windows which can be used to run Git, shell commands, and much more. | [Download Git Bash](https://gitforwindows.org/)            |
 | Google Gemini API Key                 | A Gemini API key is required to use Gemini AI to generate commit messages.                                              | [Get Gemini API Key](https://www.getgemini.ai/)            |
+| Alias Command                         | The alias command to be used for the script: `cm`.                                                                      | Bash profile (`.zshrc` or `.bash_profile`)                 |
 
 ## Installation
 
