@@ -10,12 +10,29 @@ base_branch=$(git rev-parse --abbrev-ref HEAD)
 # Extract ticket number from current directory
 ticket=$(echo $base_branch | grep -o -E '([A-Za-z]+-[0-9]{3,}|[A-Za-z]+-[0-9]{3,})')
 
-# Prompt for commit message
-read -p "Enter commit message: " message
-echo "Commit message: $ticket $message"
+echo "Ticket: $ticket"
+
+# Get the git diff
+diff=$(git diff --cached)
+
+# Stringify the diff
+diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
+
+# Prepare the Gemini API request
+gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message (72 character maximum) for the following git diff: '"$diff"' "}]}]}'
+
+# Get commit message from Gemini API
+commit_message=$(curl \
+  -H 'Content-Type: application/json' \
+  -d "$gemini_request" \
+  -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
+  |  jq -r '.candidates[0].content.parts[0].text'
+)
+
+echo "$commit_message"
 
 # Prepare and execute commit command
-git commit -S -m "$ticket $message"
+git commit -S -m "$ticket $commit_message"
 
 # Check if the branch exists on the remote
 remote_branch=$(git ls-remote --heads origin $base_branch)
