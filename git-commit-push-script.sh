@@ -17,7 +17,7 @@ diff=$(git diff --cached)
 diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
 
 # Prepare the Gemini API request
-gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message (commit message title 72 character maximum and commit message summary 50 character maxiumum) for the following git diff: '"$diff"' The format should be as follows (without titles, back ticks, or markdown fomatting): <commit message title> (2 new lines) <commit message summary>"}]}]}'
+gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' "}]}]}'
 
 # Get commit message from Gemini API
 commit_message=$(curl -s \
@@ -26,6 +26,9 @@ commit_message=$(curl -s \
   -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
   |  jq -r '.candidates[0].content.parts[0].text'
 )
+
+# Clean up commit message formatting - remove #, ```
+commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g')
 
 # Prepare and execute commit command
 git commit -S -m "$ticket $commit_message"
