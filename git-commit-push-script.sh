@@ -17,7 +17,7 @@ diff=$(git diff --cached)
 diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
 
 # Prepare the Gemini API request
-gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message (commit message title 72 character maximum and commit message summary 50 character maxiumum) for the following git diff: '"$diff"' The format should be as follows (without titles): <commit message title> (2 new lines) <commit message summary>"}]}]}'
+gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message (commit message title 72 character maximum and commit message summary 50 character maxiumum) for the following git diff: '"$diff"' The format should be as follows (without titles or back ticks): <commit message title> (2 new lines) <commit message summary>"}]}]}'
 
 # Get commit message from Gemini API
 commit_message=$(curl -s \
