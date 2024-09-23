@@ -29,8 +29,8 @@ commit_message=$(curl -s \
 
 echo $commit_message
 
-# Clean up commit message - remove #, ```, and any other characters other than A-Z, a-z, 0-9, spaces, and new lines
-commit_message=$(echo "$commit_message" | sed 's/#//g' | sed 's/```//g' | sed 's/[^A-Za-z0-9 \n]//g')
+# Clean up commit message - remove #, ```
+commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g')
 
 echo $commit_message
 
