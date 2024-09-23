@@ -1,6 +1,6 @@
-# git-commit-push-script - Automating Staging, Committing and Pushing to GitHub 👨🏻‍💻➡️
+# git-commit-push-script - Automating Staging, Committing and Pushing to GitHub with Gemini AI 👨🏻‍💻➡️
 
-Manually typing staging, commit messages, and push commands is repetative. Especially copying the ticket number into the commit message. Save time using this shell script.
+Staging, committing, and pushing code is a repetative manual process. Writing detailed commit messages and adding ticket numbers should be automated using AI. Save time using this shell script powered by Gemini AI.
 
 ## Table of Contents
 
@@ -13,19 +13,20 @@ Manually typing staging, commit messages, and push commands is repetative. Espec
 
 ## What this script automates
 
-| Name               | Description                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| Git Staging        | Staging any modified files for commit using `git add -A`.                                          |
-| Git Commit Message | Copying the ticket number of the Jira ticket as the commit message prefix. Example: `[CRS-12345]`. |
-| Git Commit         | Committing staged files with the commit message using `git commit -S -m "<commit message>"`.       |
-| Git Push           | Pushing local commits to remote branch with `git push`.                                            |
+| Name                             | Description                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Git Staging                      | Staging any modified files for commit using `git add -A`.                                          |
+| Git Commit Message Ticket Title  | Copying the ticket number of the Jira ticket as the commit message prefix. Example: `[CRS-12345]`. |
+| Writing Commit Messages Using AI | The script uses Gemini AI to generate commit messages using `git diff --cached`.                   |
+| Git Commit                       | Committing staged files with the commit message using `git commit -S -m "<commit message>"`.       |
+| Git Push                         | Pushing local commits to remote branch with `git push`.                                            |
+| Git Push Retry (Pull & Push)     | If a push fails, the script will `git pull` from the remote branch and push again.                 |
 
 ## User input required
 
 | Name           | Description                                              |
 | -------------- | -------------------------------------------------------- |
 | Alias Command  | The alias command to be used for the script: `cm`.       |
-| Commit Message | The commit message with description of the changes made. |
 
 ## Requirements
 
@@ -33,6 +34,7 @@ Manually typing staging, commit messages, and push commands is repetative. Espec
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Terminal or Shell                     | A terminal or shell for configuring and running the script.                                                             | [Download Terminal](https://www.apple.com/macos/terminal/) |
 | `Git Bash` **\*Required for Windows** | Git Bash provides a Unix command line emulator for windows which can be used to run Git, shell commands, and much more. | [Download Git Bash](https://gitforwindows.org/)            |
+| Google Gemini API Key                 | A Gemini API key is required to use Gemini AI to generate commit messages.                                              | [Get Gemini API Key](https://www.getgemini.ai/)            |
 
 ## Installation
 
@@ -60,7 +62,14 @@ chmod +x git-commit-push-script.sh
 alias cm='bash /path/to/git-commit-push-script/git-commit-push-script.sh'
 ```
 
-5. Reload the terminal or shell configuration by running the following command:
+5. Add your Gemini API key to your bash or zsh configuration file (e.g., .zshrc or .bash_profile).
+
+```shell
+export GEMINI_API_KEY=<your-gemini-api-key>
+```
+
+
+6. Reload the terminal or shell configuration by running the following command:
 
 ```shell
 source ~/.zshrc
@@ -70,33 +79,27 @@ source ~/.bash_profile
 
 ## Usage
 
-6. Test the script by running the following command from a Git repository directory with a Jira ticket branch.
+7. Test the script by running the following command from a Git repository directory with a Jira ticket branch (Example - `TEST-1234-Your-GitHub-Branch`).
 
 ```shell
 cm
 ```
 
-7. Enter your commit message when prompted.
+9. The script will stage, request the commit message from Gemini with the `git diff`, commit with the ticket prefix and message, and push the changes to the remote branch.
 
 ```shell
-Enter commit message: <Enter your commit message here>
-```
-
-8. The script will stage, commit with the ticket prefix, and push the changes to the remote branch.
-
-```shell
-Enter commit message: Test message
-Commit message: CRS-12345 - Test message
-[CRS-12345-Git-Script-Test be6fe58] CRS-12345 - Test message
- 1 file changed, 2 insertions(+), 1 deletion(-)
+[TEST-1234 f94df31] TEST-1234 Fix: Remove unnecessary text from Gemini prompt
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Branch 'TEST-1234' exists on remote. Pushing changes.
 Enumerating objects: 5, done.
 Counting objects: 100% (5/5), done.
 Delta compression using up to 16 threads
 Compressing objects: 100% (3/3), done.
-Writing objects: 100% (3/3), 643 bytes | 643.00 KiB/s, done.
-Total 3 (delta 0), reused 0 (delta 0), pack-reused 0
+Writing objects: 100% (3/3), 633 bytes | 633.00 KiB/s, done.
+Total 3 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
 To https://github.com/wesleyscholl/git-commit-push-script.git
-   c76b73c..be6fe58  CRS-12345-Git-Script-Test -> CRS-12345-Git-Script-Test
+   ead30af..f94df31  TEST-1234 -> TEST-1234
 ```
 
 ## Troubleshooting
