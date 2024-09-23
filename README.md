@@ -5,7 +5,6 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 ## Table of Contents
 
 - [What this script automates](#what-this-script-automates)
-- [User input required](#user-input-required)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)

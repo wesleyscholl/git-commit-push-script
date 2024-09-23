@@ -27,12 +27,8 @@ commit_message=$(curl -s \
   |  jq -r '.candidates[0].content.parts[0].text'
 )
 
-echo $commit_message
-
 # Clean up commit message formatting - remove #, ```
 commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g')
-
-echo $commit_message
 
 # Prepare and execute commit command
 git commit -S -m "$ticket $commit_message"
