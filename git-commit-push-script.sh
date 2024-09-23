@@ -29,8 +29,8 @@ commit_message=$(curl -s \
 
 echo $commit_message
 
-# Clean up commit message - remove #, ```, if there is a period add two new lines 
-commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\./\n\n/g')
+# Clean up commit message formatting - remove #, ```
+commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g')
 
 echo $commit_message
 
