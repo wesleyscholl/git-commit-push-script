@@ -11,7 +11,7 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 - [Usage](#usage)
 - [License](#license)
 
-## What this script automates
+## What this Script Automates
 
 | Name                             | Description                                                                                        |
 | -------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -22,7 +22,7 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 | Git Push                         | Pushing local commits to remote branch with `git push`.                                            |
 | Git Push Retry (Pull & Push)     | If a push fails, the script will `git pull` from the remote branch and push again.                 |
 
-## User input required
+## Alias Command
 
 | Name           | Description                                              |
 | -------------- | -------------------------------------------------------- |
