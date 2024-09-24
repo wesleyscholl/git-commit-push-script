@@ -17,18 +17,25 @@ diff=$(git diff --cached)
 diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
 
 # Prepare the Gemini API request
-gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' "}]}]}'
+gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
 
 # Get commit message from Gemini API
 commit_message=$(curl -s \
   -H 'Content-Type: application/json' \
   -d "$gemini_request" \
   -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
-  |  jq -r '.candidates[0].content.parts[0].text'
-)
+  | jq -r '.candidates[0].content.parts[0].text'
+  )
 
-# Clean up commit message formatting - remove #, ```
+# Clean up commit message formatting - remove #, ```,
 commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g')
+
+echo $commit_message
+
+if [ -z "$commit_message" ]; then
+	echo "Error: API request for commit message failed. Please try again."
+	exit 1
+fi
 
 # Prepare and execute commit command
 git commit -S -m "$ticket $commit_message"
