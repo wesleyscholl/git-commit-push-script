@@ -17,7 +17,14 @@ diff=$(git diff --cached)
 diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
 
 # Prepare the Gemini API request
-gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
+gemini_request='{
+	"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}],
+	"safetySettings": [{"category": "HARM_CATEGORY_DANGEROUS_CONTENT","threshold": "BLOCK_NONE"}],
+	"generationConfig": {
+		"temperature": 0.2,
+		"maxOutputTokens": 50
+	}
+}'
 
 # Get commit message from Gemini API
 commit_message=$(curl -s \
@@ -47,7 +54,7 @@ remote_branch=$(git ls-remote --heads origin $base_branch)
 pull_push_after_failed_push() {
 	echo "Push failed. Attempting to pull and push again."
 	git pull
-	git push
+	git push --force
 }
 
 # Check if the branch exists on the remote
