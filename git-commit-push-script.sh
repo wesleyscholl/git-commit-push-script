@@ -34,6 +34,16 @@ commit_message=$(curl -s \
   | jq -r '.candidates[0].content.parts[0].text'
   )
 
+# If the commit message is empty, try again
+if [ -z "$commit_message" ]; then
+	commit_message=$(curl -s \
+	  -H 'Content-Type: application/json' \
+	  -d "$gemini_request" \
+	  -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
+	  | jq -r '.candidates[0].content.parts[0].text'
+	  )
+fi
+
 # Clean up commit message formatting - remove #, ```,
 commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g')
 
@@ -45,7 +55,11 @@ if [ -z "$commit_message" ]; then
 fi
 
 # Prepare and execute commit command
-git commit -S -m "$ticket $commit_message"
+if [ -z "$ticket" ]; then
+	git commit -S -m "$commit_message"
+else
+	git commit -S -m "$ticket $commit_message"
+fi
 
 # Check if the branch exists on the remote
 remote_branch=$(git ls-remote --heads origin $base_branch)
