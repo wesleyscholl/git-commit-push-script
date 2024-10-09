@@ -17,7 +17,14 @@ diff=$(git diff --cached)
 diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
 
 # Prepare the Gemini API request
-gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
+gemini_request='{
+	"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}],
+	"safetySettings": [{"category": "HARM_CATEGORY_DANGEROUS_CONTENT","threshold": "BLOCK_NONE"}],
+	"generationConfig": {
+		"temperature": 0.2,
+		"maxOutputTokens": 50
+	}
+}'
 
 # Get commit message from Gemini API
 commit_message=$(curl -s \
@@ -26,6 +33,16 @@ commit_message=$(curl -s \
   -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
   | jq -r '.candidates[0].content.parts[0].text'
   )
+
+# If the commit message is empty, try again
+if [ -z "$commit_message" ]; then
+	commit_message=$(curl -s \
+	  -H 'Content-Type: application/json' \
+	  -d "$gemini_request" \
+	  -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
+	  | jq -r '.candidates[0].content.parts[0].text'
+	  )
+fi
 
 # Clean up commit message formatting - remove #, ```,
 commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g')
@@ -38,7 +55,11 @@ if [ -z "$commit_message" ]; then
 fi
 
 # Prepare and execute commit command
-git commit -S -m "$ticket $commit_message"
+if [ -z "$ticket" ]; then
+	git commit -S -m "$commit_message"
+else
+	git commit -S -m "$ticket $commit_message"
+fi
 
 # Check if the branch exists on the remote
 remote_branch=$(git ls-remote --heads origin $base_branch)
@@ -47,7 +68,7 @@ remote_branch=$(git ls-remote --heads origin $base_branch)
 pull_push_after_failed_push() {
 	echo "Push failed. Attempting to pull and push again."
 	git pull
-	git push
+	git push --force
 }
 
 # Check if the branch exists on the remote
