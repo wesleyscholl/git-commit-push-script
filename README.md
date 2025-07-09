@@ -1,6 +1,6 @@
-# git-commit-push-script - Automating Staging, Committing and Pushing to GitHub with Gemini AI 👨🏻‍💻➡️
+# git-commit-push-script - Automating Staging, Committing and Pushing to GitHub with Ollama and Mistral AI 👨🏻‍💻➡️
 
-Staging, committing, and pushing code is a repetative manual process. Writing detailed commit messages and adding ticket numbers should be automated using AI. Save time using this shell script powered by Gemini AI.
+Staging, committing, and pushing code is a repetative manual process. Writing detailed commit messages and adding ticket numbers should be automated using AI. Save time using this shell script powered by Ollama and Mistral AI.
 
 ## Table of Contents
 
@@ -16,8 +16,10 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 | -------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Git Staging                      | Staging any modified files for commit using `git add -A`.                                          |
 | Git Commit Message Ticket Title  | Copying the ticket number of the Jira ticket as the commit message prefix. Example: `[CRS-12345]`. |
-| Writing Commit Messages Using AI | The script uses Gemini AI to generate commit messages using `git diff --cached`.                   |
+| Writing Commit Messages Using AI | The script uses Ollama and Mistral AI to generate commit messages using `git diff --cached`.                   |
 | Git Commit                       | Committing staged files with the commit message using `git commit -S -m "<commit message>"`.       |
+| Entering SSH Passphrase          | If the SSH key is passphrase protected, the script will enter the passphrase automatically using an env variable (Ex. `GIT_SSH_PASSPHRASE`).                |
+| Git Fetch & Pull                        | Pulling the latest changes from the remote branch with `git fetch origin <branch>` & `git pull`.                         |
 | Git Push                         | Pushing local commits to remote branch with `git push`.                                            |
 | Git Push Retry (Pull & Push)     | If a push fails, the script will `git pull` from the remote branch and push again.                 |
 
@@ -27,8 +29,11 @@ Staging, committing, and pushing code is a repetative manual process. Writing de
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Terminal or Shell                     | A terminal or shell for configuring and running the script.                                                             | [Download Terminal](https://www.apple.com/macos/terminal/) |
 | `Git Bash` **\*Required for Windows** | Git Bash provides a Unix command line emulator for windows which can be used to run Git, shell commands, and much more. | [Download Git Bash](https://gitforwindows.org/)            |
-| Google Gemini API Key                 | A Gemini API key is required to use Gemini AI to generate commit messages.                                              | [Get Gemini API Key](https://www.getgemini.ai/)            |
-| Alias Command                         | The alias command to be used for the script: `cm`.                                                                      | Bash profile (`.zshrc` or `.bash_profile`)                 |
+| Ollama                | Ollama must be installed and configured.                                              | [Get Ollama](https://ollama.com/)            |
+| Mistral AI Model                     | The Mistral AI model must be downloaded and running locally. Example: `ollama pull mistral`                             | [Get Mistral](https://ollama.com/models/mistral)           |
+| Alias Command **(optional)**                         | The alias command to be used for the script: `cm`.                                                                      | Bash profile (`.zshrc` or `.bash_profile`)                 |
+| SSH Key **(optional)**               | If you want to use SSH for Git operations, you will need to configure your SSH key.                                      | [Git SSH Key Guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh) |
+| GPG Key **(optional)**               | If you want to sign your commits, you will need to configure your GPG key in Git.                                        | [Git GPG Key Guide](https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key) |
 
 ## Installation
 
@@ -56,14 +61,20 @@ chmod +x git-commit-push-script.sh
 alias cm='bash /path/to/git-commit-push-script/git-commit-push-script.sh'
 ```
 
-5. Add your Gemini API key to your bash or zsh configuration file (e.g., .zshrc or .bash_profile).
+5. Install and start the Ollama server by running the following command:
 
 ```shell
-export GEMINI_API_KEY=<your-gemini-api-key>
+homebrew install ollama
+# AND/OR #
+ollama serve
+```
+6. Download the Mistral AI model by running the following command:
+
+```shell
+ollama pull mistral
 ```
 
-
-6. Reload the terminal or shell configuration by running the following command:
+7. Reload the terminal or shell configuration by running the following command:
 
 ```shell
 source ~/.zshrc
@@ -73,27 +84,38 @@ source ~/.bash_profile
 
 ## Usage
 
-7. Test the script by running the following command from a Git repository directory with a Jira ticket branch (Example - `TEST-1234-Your-GitHub-Branch`).
+1. Test the script by running the following command from a Git repository directory with a Jira ticket branch (Example - `TEST-1234-Your-GitHub-Branch`).
 
 ```shell
 cm
+# OR #
+./git-commit-push-script.sh
 ```
 
-9. The script will stage, request the commit message from Gemini with the `git diff`, commit with the ticket prefix and message, and push the changes to the remote branch.
+2. The script will stage, request the commit message from Ollama and Mistral with the `git diff`, commit with the ticket prefix and message, and push the changes to the remote branch.
 
 ```shell
-[TEST-1234 f94df31] TEST-1234 Fix: Remove unnecessary text from Gemini prompt
- 1 file changed, 1 insertion(+), 1 deletion(-)
-Branch 'TEST-1234' exists on remote. Pushing changes.
-Enumerating objects: 5, done.
-Counting objects: 100% (5/5), done.
-Delta compression using up to 16 threads
-Compressing objects: 100% (3/3), done.
-Writing objects: 100% (3/3), 633 bytes | 633.00 KiB/s, done.
-Total 3 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
-remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
-To https://github.com/wesleyscholl/git-commit-push-script.git
-   ead30af..f94df31  TEST-1234 -> TEST-1234
+argo-gr-cr-test git:(WXYZ-1234) cm
+Removed sync options, enabled cron workflow
+spawn git commit -S -m WXYZ-1234 Removed sync options, enabled cron workflow
+Enter passphrase for "/Users/wscholl/.ssh/id_ed25519": 
+[WXYZ-1234 94f179e] WXYZ-1234 Removed sync options, enabled cron workflow
+ 1 file changed, 7 deletions(-)
+Branch 'WXYZ-1234' exists on remote.
+Pulling latest changes from remote branch...
+From https://github.com/myOrg/argo-gr-cr-test
+ * branch            WXYZ-1234  -> FETCH_HEAD
+Already up to date.
+Pushing changes to remote WXYZ-1234 branch...
+Enumerating objects: 9, done.
+Counting objects: 100% (9/9), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (5/5), done.
+Writing objects: 100% (5/5), 671 bytes | 671.00 KiB/s, done.
+Total 5 (delta 4), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (4/4), completed with 4 local objects.
+To https://github.com/myOrg/argo-gr-cr-test.git
+   f546666..94f179e  WXYZ-1234 -> WXYZ-1234
 ```
 
 ## Troubleshooting
@@ -110,8 +132,12 @@ To resolve this error, remove the `-S` from the command in the `git-commit-push-
 git commit -m "<commit message>"
 ```
 
-If you want to use the -S flag, configure your Git configuration to use the GPG key for signing commits.
+Or if you want to use the -S flag, configure your Git configuration to use the GPG key for signing commits.
 Use the guide here: <https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key>
+
+## Contributing
+
+Contributions are welcome! If you have suggestions for improvements or new features, please open an issue or submit a pull request.
 
 ## License
 
