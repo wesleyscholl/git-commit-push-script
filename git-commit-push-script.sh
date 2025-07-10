@@ -33,12 +33,11 @@ if [ -z "$COMMIT_MSG" ]; then
 fi
 
 # Clean up commit message formatting - remove #, ```, period . at the end of response
-commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | head -n 1)
+commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g')
 
-# If the commit message is longer than 72 characters, truncate it at word boundary
+# If the commit message is longer than 72 characters, truncate it
 if [ ${#commit_message} -gt 72 ]; then
-    # Truncate at the last word boundary before 72 characters
-    commit_message=$(echo "$commit_message" | cut -c 1-72 | sed 's/\s\+[^\s]*$//')
+	commit_message=${commit_message:0:72}...
 fi
 
 # Echo the commit message
