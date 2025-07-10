@@ -21,7 +21,7 @@ diff=$(git diff --cached)
 MODEL="mistral"
 
 # Prepare the prompt
-PROMPT=$(printf "You are an expert software engineer.\n\nYour job is to generate a concise, descriptive commit message from the following git diff.\nThe commit message MUST be 72 characters or less - this is a strict requirement.\nOnly return the commit message itself without quotes, explanations or additional text.\n\nGit diff:\n%s" "$diff")
+PROMPT=$(printf "You are an expert software engineer.\n\nYour job is to generate a short, descriptive commit message from the following git diff.\nOnly return the commit message, 72 characters maximum in length. Do not include any other text in the response.\n\nGit diff:\n%s" "$diff")
 
 # Run the model and capture output
 COMMIT_MSG=$(echo "$PROMPT" | ollama run "$MODEL")
@@ -32,19 +32,19 @@ if [ -z "$COMMIT_MSG" ]; then
 	exit 1
 fi
 
-# Clean up commit message formatting - remove #, ```, period . at the end of response
-commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g')
+# Clean up commit message formatting - remove #, ```, "", '', and period . at the end of response
+commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g")
 
-# If the commit message is longer than 72 characters, truncate it
+# If the commit message is longer than 72 characters, truncate at the last word boundary
 if [ ${#commit_message} -gt 72 ]; then
-	commit_message=${commit_message:0:72}...
+	commit_message=$(echo $commit_message | cut -d' ' -f1-18)
 fi
 
 # Echo the commit message
 echo $commit_message
 
 # Set the GIT_SSH_PASSPHRASE environment variables
-export COMMIT_MESSAGE=$commit_message
+export COMMIT_MESSAGE="$commit_message"
 export TICKET="$ticket"
 
 # Prepare and execute commit command, remove -S to commit without signing
