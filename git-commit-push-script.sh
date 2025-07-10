@@ -44,7 +44,7 @@ fi
 echo $commit_message
 
 # Set the GIT_SSH_PASSPHRASE environment variables
-export COMMIT_MESSAGE="$commit_message"
+export COMMIT_MESSAGE=$commit_message
 export TICKET="$ticket"
 
 # Prepare and execute commit command, remove -S to commit without signing
