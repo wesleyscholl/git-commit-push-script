@@ -21,7 +21,7 @@ diff=$(git diff --cached)
 MODEL="mistral"
 
 # Prepare the prompt
-PROMPT=$(printf "You are an expert software engineer.\n\nYour job is to generate a concise, descriptive commit message from the following git diff.\nThe commit message MUST be 72 characters or less - this is a strict requirement.\nOnly return the commit message itself without quotes, explanations or additional text.\n\nGit diff:\n%s" "$diff")
+PROMPT=$(printf "You are an expert software engineer.\n\nYour job is to generate a concise, descriptive commit message from the following git diff.\nThe commit message MUST be no more than 72 characters in length - this is a strict requirement.\nOnly return the commit message itself without quotes, explanations or additional text.\nDon't include phrases like 'It appears you have', 'I see that you', or 'You seem to have', 'It looks like' or similar in your response.\nThe response should be factual and focused on the changes made.\n\nGit diff:\n%s" "$diff")
 
 # Run the model and capture output
 COMMIT_MSG=$(echo "$PROMPT" | ollama run "$MODEL")
