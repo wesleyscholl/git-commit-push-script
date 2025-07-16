@@ -5,43 +5,78 @@
 #!/bin/bash
 source ~/.bash_profile
 
+# Pre-warm the model (optional - keeps it loaded)
+ollama run mistral-commit "test" > /dev/null 2>&1 &
+
 # Stage all changes
 git add -A
 
 # Get the branch name
 base_branch=$(git rev-parse --abbrev-ref HEAD)
+echo "Current branch: $base_branch"
+
+# Get default branch or main branch
+default_branch=$(git rev-parse --abbrev-ref origin/HEAD | sed 's@^origin/@@')
+echo "Default branch: $default_branch"
 
 # Extract Jira ticket number from current directory 
 ticket=$(echo $base_branch | grep -o -E '([A-Za-z]+-[0-9]{3,}|[A-Za-z]+-[0-9]{3,})')
 
-# Get the git diff
-diff=$(git diff --cached)
+# Get the git diff comparing the current branch with the default branch
+diff=$(git diff origin/$default_branch)
+# echo "Git diff:\n\n$diff"
 
-# Default model (change if desired)
-MODEL="mistral"
+# # Default model (change if desired)
+# MODEL="mistral-commit"
 
-# Prepare the prompt
-PROMPT=$(printf "You are an expert software engineer.\n\nYour job is to generate a concise, descriptive commit message from the following git diff.\nThe commit message MUST be no more than 72 characters in length - this is a strict requirement.\nOnly return the commit message itself without quotes, explanations or additional text.\nDon't include phrases like 'It appears you have', 'I see that you', or 'You seem to have', 'It looks like' or similar in your response.\nThe response should be factual and focused on the changes made.\n\nGit diff:\n%s" "$diff")
+# # Prepare the prompt
+# PROMPT="$diff"
 
-# Run the model and capture output
-COMMIT_MSG=$(echo "$PROMPT" | ollama run "$MODEL")
+# # Run the model and capture output
+# COMMIT_MSG=$(ollama run "$MODEL" "$PROMPT")
 
-# If the commit message is empty, exit with an error
-if [ -z "$COMMIT_MSG" ]; then
-	echo "Error: Commit message is empty. Please check the diff and try again."
+# # If the commit message is empty, exit with an error
+# if [ -z "$COMMIT_MSG" ]; then
+# 	echo "Error: Commit message is empty. Please check the diff and try again."
+# 	exit 1
+# fi
+
+# Stringify the diff
+diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
+
+# Prepare the Gemini API request
+gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
+
+# Get commit message from Gemini API
+commit_message=$(curl -s \
+  -H 'Content-Type: application/json' \
+  -d "$gemini_request" \
+  -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
+  | jq -r '.candidates[0].content.parts[0].text'
+  )
+
+# Clean up commit message formatting - remove #, ```, "", '', ()), and period . at the end of response
+commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/())//g' | sed 's/()//g' | sed 's/Commit message://g' | sed 's/Commit message title: //g' | sed 's/Commit message summary: //g' | sed 's/Commit message body: //g' | sed 's/Commit message body://g')
+
+echo $commit_message
+
+if [ -z "$commit_message" ]; then
+	echo "Error: API request for commit message failed. Please try again."
 	exit 1
 fi
 
-# Clean up commit message formatting - remove #, ```, "", '', and period . at the end of response
-commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g")
+# # Clean up commit message formatting - remove #, ```, "", '', ()), and period . at the end of response
+# commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/())//g' | sed 's/()//g' | sed 's/Commit message://g' | sed 's/Commit message title: //g' | sed 's/Commit message summary: //g' | sed 's/Commit message body: //g' | sed 's/Commit message body://g')
 
-# If the commit message is longer than 72 characters, truncate at the last word boundary
-if [ ${#commit_message} -gt 72 ]; then
-	commit_message=$(echo $commit_message | cut -d' ' -f1-18)
-fi
+# # If the commit message is longer than 72 characters, truncate at the last word boundary
+# if [ ${#commit_message} -gt 72 ]; then
+# 	commit_message=$(echo $commit_message | cut -d' ' -f1-18)
+# fi
 
 # Echo the commit message
 echo $commit_message
+
+$commit_message == null ? commit_message="Updated ${base_branch} branch" : echo "Commit message: $commit_message"
 
 # Set the GIT_SSH_PASSPHRASE environment variables
 export COMMIT_MESSAGE="$commit_message"
