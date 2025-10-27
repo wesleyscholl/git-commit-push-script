@@ -42,21 +42,30 @@ diff=$(git diff origin/$default_branch)
 # fi
 
 # Stringify the diff
-diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
+# diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
+
+# Default model (change if desired)
+MODEL="gemma3:4b"
+
+# Prepare the prompt
+PROMPT=$(printf "You are an expert software engineer and technical writer. Write a clear, professional commit message based on the following Git diff. Requirements:\n- Summarize the purpose and key changes made, like if a file was created, edited, moved or deleted.\n- Include which files were created, modified, deleted (removed), or moved if applicable.\n- Do NOT include quotes, explanations, diff syntax, markdown formatting, or any additional text or formatting.\n- Limit your response to 20 tokens.\n\n Respond in the following format:\nCommit message: <Your concise commit message>\n\nGit diff:\n%s" "$diff")
+
+# Run the model and capture output
+commit_message=$(echo "$PROMPT" | ollama run "$MODEL")
 
 # Prepare the Gemini API request
-gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
+# gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
 
-# Get commit message from Gemini API
-commit_message=$(curl -s \
-  -H 'Content-Type: application/json' \
-  -d "$gemini_request" \
-  -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
-  | jq -r '.candidates[0].content.parts[0].text'
-  )
+# # Get commit message from Gemini API
+# commit_message=$(curl -s \
+#   -H 'Content-Type: application/json' \
+#   -d "$gemini_request" \
+#   -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
+#   | jq -r '.candidates[0].content.parts[0].text'
+#   )
 
-# Clean up commit message formatting - remove #, ```, "", '', ()), and period . at the end of response
-commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/())//g' | sed 's/()//g' | sed 's/Commit message://g' | sed 's/Commit message title: //g' | sed 's/Commit message summary: //g' | sed 's/Commit message body: //g' | sed 's/Commit message body://g')
+# # Clean up commit message formatting - remove #, ```, "", '', ()), and period . at the end of response
+commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/())//g' | sed 's/()//g' | sed 's/Commit message://g' | sed 's/Commit message title: //g' | sed 's/Commit message summary: //g' | sed 's/Commit message body: //g' | sed 's/Commit message body://g' | sed 's/^\s*//;s/\s*$//' | sed 's/Code Review Request://g' | sed 's/Code Review://g' | sed 's/Summary of changes://g')
 
 echo $commit_message
 
@@ -74,9 +83,16 @@ fi
 # fi
 
 # Echo the commit message
-echo $commit_message
+# echo $commit_message
 
-$commit_message == null ? commit_message="Updated ${base_branch} branch" : echo "Commit message: $commit_message"
+# $commit_message == null ? commit_message="Updated ${base_branch} branch" : echo "Commit message: $commit_message"
+# Check for null commit message and set a default if necessary
+if [ "$commit_message" == "null" ] || [ -z "$commit_message" ]; then
+	commit_message="Updated ${base_branch} branch"
+	echo "Commit message is null or empty. Using default: $commit_message"
+else
+	echo "Commit message: $commit_message"
+fi
 
 # Set the GIT_SSH_PASSPHRASE environment variables
 export COMMIT_MESSAGE="$commit_message"
