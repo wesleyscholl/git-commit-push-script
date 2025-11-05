@@ -2,6 +2,8 @@
 
 Staging, committing, and pushing code is a repetative manual process. Writing detailed commit messages and adding ticket numbers should be automated using AI. Save time using this shell script powered by Ollama and Mistral AI.
 
+<img height="550" alt="cm" src="https://github.com/user-attachments/assets/7600a83d-1a96-4afe-9cf2-82e6604675a8" />
+
 ## Table of Contents
 
 - [What this script automates](#what-this-script-automates)
