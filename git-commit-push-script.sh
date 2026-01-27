@@ -6,6 +6,23 @@ MAX_DIFF_CHARS=2000      # Truncate diff to prevent long processing
 TIMEOUT_SECONDS=10       # Max time to wait for LLM response
 MAX_COMMIT_LENGTH=50     # Max characters for commit message
 
+# Spinner animation function
+spinner() {
+    local pid=$1
+    local delay=0.1
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    while ps -p $pid > /dev/null 2>&1; do
+        for (( i=0; i<${#spinstr}; i++ )); do
+            printf "\r${spinstr:$i:1} Generating commit message..."
+            sleep $delay
+            if ! ps -p $pid > /dev/null 2>&1; then
+                break
+            fi
+        done
+    done
+    printf "\r✓ Done!                        \n"
+}
+
 # Stage all changes
 git add -A
 
@@ -50,11 +67,17 @@ else
     PROMPT="Git commit message (max 50 chars, no quotes/formatting):
 $(echo "$diff" | head -50)"
 
-    # Run model with timeout
-    commit_message=$(echo "$PROMPT" | timeout $TIMEOUT_SECONDS ollama run "$MODEL" --verbose 2>/dev/null | head -1)
+    # Run model with timeout and spinner
+    echo "$PROMPT" | timeout $TIMEOUT_SECONDS ollama run "$MODEL" --verbose 2>/dev/null | head -1 > /tmp/commit_msg.txt &
+    LLM_PID=$!
+    spinner $LLM_PID
+    wait $LLM_PID
+    exit_code=$?
+    commit_message=$(cat /tmp/commit_msg.txt)
+    rm -f /tmp/commit_msg.txt
     
     # Check if timeout occurred or empty response
-    if [ $? -eq 124 ] || [ -z "$commit_message" ]; then
+    if [ $exit_code -eq 124 ] || [ -z "$commit_message" ]; then
         echo "LLM timeout or empty response. Using fallback message."
         commit_message="$fallback_message"
     fi
