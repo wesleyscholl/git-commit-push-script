@@ -1,12 +1,10 @@
-## Automating Staging, Committing and Pushing to GitHub with Ollama and Mistral AI 👨🏻‍💻➡️
-## AI commits generated from git diff 
-## Configuration instructions: https://github.com/wesleyscholl/git-commit-push-script 
-
 #!/bin/bash
 source ~/.bash_profile
 
-# Pre-warm the model (optional - keeps it loaded)
-ollama run mistral-commit "test" > /dev/null 2>&1 &
+# Configuration
+MAX_DIFF_CHARS=2000      # Truncate diff to prevent long processing
+TIMEOUT_SECONDS=10       # Max time to wait for LLM response
+MAX_COMMIT_LENGTH=50     # Max characters for commit message
 
 # Stage all changes
 git add -A
@@ -22,79 +20,63 @@ echo "Default branch: $default_branch"
 # Extract Jira ticket number from current directory 
 ticket=$(echo $base_branch | grep -o -E '([A-Za-z]+-[0-9]{3,}|[A-Za-z]+-[0-9]{3,})')
 
-# Get the git diff comparing the current branch with the default branch
-diff=$(git diff origin/$default_branch)
-# echo "Git diff:\n\n$diff"
+# Get changed files for fallback message
+changed_files=$(git diff --name-only origin/$default_branch | head -3)
+first_file=$(echo "$changed_files" | head -1)
+file_count=$(git diff --name-only origin/$default_branch | wc -l | tr -d ' ')
 
-# # Default model (change if desired)
-# MODEL="mistral-commit"
-
-# # Prepare the prompt
-# PROMPT="$diff"
-
-# # Run the model and capture output
-# COMMIT_MSG=$(ollama run "$MODEL" "$PROMPT")
-
-# # If the commit message is empty, exit with an error
-# if [ -z "$COMMIT_MSG" ]; then
-# 	echo "Error: Commit message is empty. Please check the diff and try again."
-# 	exit 1
-# fi
-
-# Stringify the diff
-# diff=$(echo $diff | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\n/\\n/g')
-
-# Default model (change if desired)
-MODEL="gemma3:4b"
-
-# Prepare the prompt
-PROMPT=$(printf "You are an expert software engineer and technical writer. Write a clear, professional commit message based on the following Git diff. Requirements:\n- Summarize the purpose and key changes made, like if a file was created, edited, moved or deleted.\n- Include which files were created, modified, deleted (removed), or moved if applicable.\n- Do NOT include quotes, explanations, diff syntax, markdown formatting, or any additional text or formatting.\n- Limit your response to 20 tokens.\n\n Respond in the following format:\nCommit message: <Your concise commit message>\n\nGit diff:\n%s" "$diff")
-
-# Run the model and capture output
-commit_message=$(echo "$PROMPT" | ollama run "$MODEL")
-
-# Prepare the Gemini API request
-# gemini_request='{"contents":[{"parts":[{"text": "Write a git commit message title (no more than 72 characters total) for the following git diff: '"$diff"' Do not include any other text in the repsonse."}]}]}'
-
-# # Get commit message from Gemini API
-# commit_message=$(curl -s \
-#   -H 'Content-Type: application/json' \
-#   -d "$gemini_request" \
-#   -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
-#   | jq -r '.candidates[0].content.parts[0].text'
-#   )
-
-# # Clean up commit message formatting - remove #, ```, "", '', ()), and period . at the end of response
-commit_message=$(echo $commit_message | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/())//g' | sed 's/()//g' | sed 's/Commit message://g' | sed 's/Commit message title: //g' | sed 's/Commit message summary: //g' | sed 's/Commit message body: //g' | sed 's/Commit message body://g' | sed 's/^\s*//;s/\s*$//' | sed 's/Code Review Request://g' | sed 's/Code Review://g' | sed 's/Summary of changes://g')
-
-echo $commit_message
-
-if [ -z "$commit_message" ]; then
-	echo "Error: API request for commit message failed. Please try again."
-	exit 1
-fi
-
-# # Clean up commit message formatting - remove #, ```, "", '', ()), and period . at the end of response
-# commit_message=$(echo $COMMIT_MSG | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message title://g' | sed 's/Commit message summary://g' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/())//g' | sed 's/()//g' | sed 's/Commit message://g' | sed 's/Commit message title: //g' | sed 's/Commit message summary: //g' | sed 's/Commit message body: //g' | sed 's/Commit message body://g')
-
-# # If the commit message is longer than 72 characters, truncate at the last word boundary
-# if [ ${#commit_message} -gt 72 ]; then
-# 	commit_message=$(echo $commit_message | cut -d' ' -f1-18)
-# fi
-
-# Echo the commit message
-# echo $commit_message
-
-# $commit_message == null ? commit_message="Updated ${base_branch} branch" : echo "Commit message: $commit_message"
-# Check for null commit message and set a default if necessary
-if [ "$commit_message" == "null" ] || [ -z "$commit_message" ]; then
-	commit_message="Updated ${base_branch} branch"
-	echo "Commit message is null or empty. Using default: $commit_message"
+# Generate fallback message based on changes
+if [ "$file_count" -eq 1 ]; then
+    fallback_message="${first_file} updated"
+elif [ "$file_count" -gt 1 ]; then
+    fallback_message="${first_file} and $((file_count - 1)) other file(s) updated"
 else
-	echo "Commit message: $commit_message"
+    fallback_message="Updated ${base_branch} branch"
 fi
 
-# Set the GIT_SSH_PASSPHRASE environment variables
+# Get the git diff - truncate for performance
+diff=$(git diff origin/$default_branch | head -c $MAX_DIFF_CHARS)
+
+# Skip LLM if diff is too large (use fallback)
+diff_size=$(git diff origin/$default_branch | wc -c | tr -d ' ')
+if [ "$diff_size" -gt 10000 ]; then
+    echo "Large diff detected ($diff_size chars). Using fallback message."
+    commit_message="$fallback_message"
+else
+    # Default model
+    MODEL="gemma3:4b"
+
+    # Optimized prompt - shorter, more direct
+    PROMPT="Git commit message (max 50 chars, no quotes/formatting):
+$(echo "$diff" | head -50)"
+
+    # Run model with timeout
+    commit_message=$(echo "$PROMPT" | timeout $TIMEOUT_SECONDS ollama run "$MODEL" --verbose 2>/dev/null | head -1)
+    
+    # Check if timeout occurred or empty response
+    if [ $? -eq 124 ] || [ -z "$commit_message" ]; then
+        echo "LLM timeout or empty response. Using fallback message."
+        commit_message="$fallback_message"
+    fi
+fi
+
+# Clean up commit message formatting
+commit_message=$(echo "$commit_message" | sed 's/#//g' | sed 's/```//g' | sed 's/Commit message://gi' | sed 's/\.//g' | sed 's/\"//g' | sed "s/'//g" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+# Truncate to max length at word boundary
+if [ ${#commit_message} -gt $MAX_COMMIT_LENGTH ]; then
+    commit_message=$(echo "$commit_message" | cut -c1-$MAX_COMMIT_LENGTH | sed 's/[[:space:]][^[:space:]]*$//')
+fi
+
+echo "Commit message: $commit_message"
+
+# Final fallback check
+if [ -z "$commit_message" ] || [ "$commit_message" == "null" ]; then
+    commit_message="$fallback_message"
+    echo "Using fallback: $commit_message"
+fi
+
+# Set the environment variables
 export COMMIT_MESSAGE="$commit_message"
 export TICKET="$ticket"
 
