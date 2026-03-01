@@ -3,8 +3,19 @@ source ~/.bash_profile
 
 # Configuration
 MAX_DIFF_CHARS=2000      # Truncate diff to prevent long processing
-TIMEOUT_SECONDS=10       # Max time to wait for LLM response
+TIMEOUT_SECONDS=45       # Max time to wait for LLM response (squish auto-starts server on first run)
 MAX_COMMIT_LENGTH=50     # Max characters for commit message
+
+# Squish model selection — set SQUISH_MODEL to target a specific compressed model.
+# Accepts a name hint (e.g. "14b", "7b") or a full path to a model directory.
+# Leave empty to let squish auto-detect (uses the first available model in ~/models).
+# Examples:
+#   SQUISH_MODEL="14b"                                      # matches Qwen2.5-14B-*
+#   SQUISH_MODEL="$HOME/models/Qwen2.5-14B-Instruct-bf16"  # explicit path
+SQUISH_MODEL="${SQUISH_MODEL:-}"
+
+# Squish server port — override if you run multiple squish servers concurrently.
+SQUISH_PORT="${SQUISH_PORT:-8000}"
 
 # Colors
 RED='\033[0;31m'
@@ -99,10 +110,10 @@ if [ -n "$ticket" ]; then
 fi
 echo ""
 
-# Get changed files for fallback message
-changed_files=$(git diff --name-only origin/$default_branch | head -3)
+# Get changed files for fallback message (staged changes vs last commit)
+changed_files=$(git diff --cached --name-only | head -3)
 first_file=$(echo "$changed_files" | head -1)
-file_count=$(git diff --name-only origin/$default_branch | wc -l | tr -d ' ')
+file_count=$(git diff --cached --name-only | wc -l | tr -d ' ')
 
 # Show changed files
 print_step "Files changed: ${WHITE}$file_count${NC}"
@@ -125,36 +136,95 @@ else
     fallback_message="Updated ${base_branch} branch"
 fi
 
-# Get the git diff - truncate for performance
-diff=$(git diff origin/$default_branch | head -c $MAX_DIFF_CHARS)
+# Get the git diff (staged changes vs last commit) - truncate for performance
+diff=$(git diff --cached | head -c $MAX_DIFF_CHARS)
 
 # Skip LLM if diff is too large (use fallback)
-diff_size=$(git diff origin/$default_branch | wc -c | tr -d ' ')
+diff_size=$(git diff --cached | wc -c | tr -d ' ')
 if [ "$diff_size" -gt 10000 ]; then
     print_warning "Large diff detected (${diff_size} chars). Using fallback."
     commit_message="$fallback_message"
 else
-    # Default model
-    MODEL="gemma3:4b"
+    # Squish local LLM — no API key, no rate limits, no cloud
+    # Server auto-starts on first use (~20s), then stays alive for near-instant responses
 
-    # Optimized prompt - shorter, more direct
-    PROMPT="Git commit message (max 50 chars, no quotes/formatting):
+    # Build model / port flags from config vars (empty = squish auto-detects)
+    SQUISH_FLAGS=""
+    if [ -n "$SQUISH_MODEL" ]; then
+        SQUISH_FLAGS="--model $SQUISH_MODEL"
+    fi
+    if [ -n "$SQUISH_PORT" ]; then
+        SQUISH_FLAGS="$SQUISH_FLAGS --port $SQUISH_PORT"
+    fi
+
+    # ── Debug: squish availability ───────────────────────────────────────────
+    SQUISH_BIN=$(command -v squish 2>/dev/null)
+    if [ -n "$SQUISH_BIN" ]; then
+        print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
+    else
+        print_warning "squish not found in PATH — will use fallback message"
+        commit_message="$fallback_message"
+        # Skip straight to the fallback (jump past the squish block)
+    fi
+
+    if [ -n "$SQUISH_BIN" ]; then
+        # Show which model / port will be used
+        if [ -n "$SQUISH_MODEL" ]; then
+            print_info "squish model: ${CYAN}$SQUISH_MODEL${NC}"
+        else
+            print_info "squish model: ${GRAY}auto-detect${NC}"
+        fi
+        print_info "squish port:  ${CYAN}${SQUISH_PORT:-8000}${NC}"
+        print_info "squish flags: ${GRAY}${SQUISH_FLAGS:-<none>}${NC}"
+
+        # Check if a server is already listening on the port
+        _port="${SQUISH_PORT:-8000}"
+        if nc -z 127.0.0.1 "$_port" 2>/dev/null; then
+            print_info "squish server: ${GREEN}already running on :$_port${NC}"
+        else
+            print_info "squish server: ${YELLOW}not running — squish will auto-start (first call ~20–90s)${NC}"
+        fi
+        echo ""
+
+        # Optimized prompt - shorter, more direct
+        PROMPT="Git commit message (max 50 chars, no quotes/formatting):
 $(echo "$diff" | head -50)"
 
-    # Run model with timeout and spinner
-    print_step "Asking AI for commit message..."
-    echo "$PROMPT" | timeout $TIMEOUT_SECONDS ollama run "$MODEL" --verbose 2>/dev/null | head -1 > /tmp/commit_msg.txt &
-    LLM_PID=$!
-    spinner $LLM_PID
-    wait $LLM_PID
-    exit_code=$?
-    commit_message=$(cat /tmp/commit_msg.txt)
-    rm -f /tmp/commit_msg.txt
-    
-    # Check if timeout occurred or empty response
-    if [ $exit_code -eq 124 ] || [ -z "$commit_message" ]; then
-        print_warning "LLM timeout. Using fallback message."
-        commit_message="$fallback_message"
+        # Run squish with timeout and spinner
+        print_step "Asking AI for commit message (Squish local LLM)..."
+        # shellcheck disable=SC2086  # SQUISH_FLAGS intentionally word-splits for multi-flag support
+        echo "$PROMPT" | timeout $TIMEOUT_SECONDS squish run $SQUISH_FLAGS --max-tokens 60 --temperature 0.2 2>/tmp/squish_stderr.txt | head -1 > /tmp/commit_msg.txt &
+        LLM_PID=$!
+        spinner $LLM_PID
+        wait $LLM_PID
+        exit_code=$?
+
+        # ── Debug: result diagnostics ─────────────────────────────────────────
+        commit_message=$(cat /tmp/commit_msg.txt 2>/dev/null)
+        squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
+        rm -f /tmp/commit_msg.txt /tmp/squish_stderr.txt
+
+        print_info "squish exit code: ${CYAN}$exit_code${NC}"
+        if [ -n "$commit_message" ]; then
+            print_info "squish raw response: ${GREEN}\"$commit_message\"${NC}"
+        else
+            print_info "squish raw response: ${RED}<empty>${NC}"
+        fi
+        if [ -n "$squish_stderr" ]; then
+            print_info "squish stderr: ${YELLOW}$(echo "$squish_stderr" | head -3)${NC}"
+        fi
+        echo ""
+
+        # Check if timeout occurred or empty response
+        if [ $exit_code -eq 124 ]; then
+            print_warning "squish timed out after ${TIMEOUT_SECONDS}s. Using fallback message."
+            commit_message="$fallback_message"
+        elif [ -z "$commit_message" ]; then
+            print_warning "squish returned empty response. Using fallback message."
+            commit_message="$fallback_message"
+        else
+            print_success "squish responded successfully"
+        fi
     fi
 fi
 
