@@ -17,8 +17,6 @@ SQUISH_MODEL="${SQUISH_MODEL:-}"
 # Squish server port — override if you run multiple squish servers concurrently.
 SQUISH_PORT="${SQUISH_PORT:-8000}"
 
-# comment
-
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -154,7 +152,7 @@ if [ -n "$SQUISH_PORT" ]; then
 fi
 
 # ── Debug: squish availability ───────────────────────────────────────────
-SQUISH_BIN=$(command -v squish 2>/dev/null)
+SQUISH_BIN=$(squish --version 2>/dev/null)
 if [ -n "$SQUISH_BIN" ]; then
     print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
 else
