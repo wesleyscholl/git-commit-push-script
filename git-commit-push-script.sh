@@ -173,55 +173,88 @@ if [ -n "$SQUISH_BIN" ]; then
         print_info "squish model: ${GRAY}auto-detect${NC}"
     fi
     print_info "squish port:  ${CYAN}${SQUISH_PORT:-8000}${NC}"
-    print_info "squish flags: ${GRAY}${SQUISH_FLAGS:-<none>}${NC}"
 
     # Check if a server is already listening on the port
     _port="${SQUISH_PORT:-8000}"
     if nc -z 127.0.0.1 "$_port" 2>/dev/null; then
         print_info "squish server: ${GREEN}already running on :$_port${NC}"
     else
-        print_info "squish server: ${YELLOW}not running — squish will auto-start (first call ~20–90s)${NC}"
+        print_info "squish server: ${YELLOW}not running — starting it now…${NC}"
+        # Start the server in the background and wait for it
+        $SQUISH_BIN serve ${SQUISH_MODEL:+--model $SQUISH_MODEL} --port "$_port" > /tmp/squish_serve.log 2>&1 &
+        _serve_pid=$!
+        _waited=0
+        while [ $_waited -lt 90 ] && ! nc -z 127.0.0.1 "$_port" 2>/dev/null; do
+            sleep 1
+            _waited=$((_waited + 1))
+        done
+        if ! nc -z 127.0.0.1 "$_port" 2>/dev/null; then
+            print_warning "Server failed to start. Using fallback message."
+            commit_message="$fallback_message"
+        else
+            print_success "Server ready (${_waited}s)"
+        fi
     fi
     echo ""
 
-    # Prompt — send full diff, truncated only at MAX_DIFF_CHARS for token sanity
-    PROMPT="Git commit message (max 50 chars, no quotes/formatting):
-$diff"
+    if [ -z "$commit_message" ]; then
+        # Build a focused prompt — only the stat summary + truncated diff,
+        # no surrounding debug text that could confuse the model.
+        stat_summary=$(git diff --cached --stat | tail -1)
+        changed_names=$(git diff --cached --name-only | head -10 | tr '\n' ' ')
 
-    # Run squish with timeout and spinner
-    print_step "Asking AI for commit message (Squish local LLM)..."
-    # shellcheck disable=SC2086  # SQUISH_FLAGS intentionally word-splits for multi-flag support
-    echo "$PROMPT" | timeout $TIMEOUT_SECONDS $SQUISH_BIN run $SQUISH_FLAGS --max-tokens 60 --temperature 0.2 2>/tmp/squish_stderr.txt | head -1 > /tmp/commit_msg.txt &
-    LLM_PID=$!
-    spinner $LLM_PID
-    wait $LLM_PID
-    exit_code=$?
+        PAYLOAD=$(printf '{"model":"squish","messages":[{"role":"system","content":"You generate concise git commit messages. Reply with ONLY the commit message, nothing else. Max 50 characters. Imperative mood. No period. No quotes. No markdown."},{"role":"user","content":"Files changed: %s\nSummary: %s\n\nDiff:\n%s\n\nCommit message:"}],"max_tokens":60,"temperature":0.2,"stream":false}' \
+            "$changed_names" "$stat_summary" "$diff")
 
-    # ── Debug: result diagnostics ─────────────────────────────────────────
-    commit_message=$(cat /tmp/commit_msg.txt 2>/dev/null)
-    squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
-    rm -f /tmp/commit_msg.txt /tmp/squish_stderr.txt
+        # Run squish with timeout and spinner
+        print_step "Asking AI for commit message (Squish local LLM)..."
+        _port="${SQUISH_PORT:-8000}"
+        curl -s --max-time $TIMEOUT_SECONDS \
+            -X POST "http://127.0.0.1:${_port}/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" 2>/tmp/squish_stderr.txt \
+            > /tmp/squish_response.txt &
+        LLM_PID=$!
+        spinner $LLM_PID
+        wait $LLM_PID
+        exit_code=$?
 
-    print_info "squish exit code: ${CYAN}$exit_code${NC}"
-    if [ -n "$commit_message" ]; then
-        print_info "squish raw response: ${GREEN}\"$commit_message\"${NC}"
-    else
-        print_info "squish raw response: ${RED}<empty>${NC}"
-    fi
-    if [ -n "$squish_stderr" ]; then
-        print_info "squish stderr: ${YELLOW}$(echo "$squish_stderr" | head -3)${NC}"
-    fi
-    echo ""
+        # ── Debug: result diagnostics ─────────────────────────────────────────
+        raw_response=$(cat /tmp/squish_response.txt 2>/dev/null)
+        squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
+        rm -f /tmp/squish_response.txt /tmp/squish_stderr.txt
 
-    # Check if timeout occurred or empty response
-    if [ $exit_code -eq 124 ]; then
-        print_warning "squish timed out after ${TIMEOUT_SECONDS}s. Using fallback message."
-        commit_message="$fallback_message"
-    elif [ -z "$commit_message" ]; then
-        print_warning "squish returned empty response. Using fallback message."
-        commit_message="$fallback_message"
-    else
-        print_success "squish responded successfully"
+        # Extract the message content from the JSON response
+        commit_message=$(echo "$raw_response" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data['choices'][0]['message']['content'].strip())
+except Exception:
+    pass
+" 2>/dev/null)
+
+        print_info "squish exit code: ${CYAN}$exit_code${NC}"
+        if [ -n "$commit_message" ]; then
+            print_info "squish raw response: ${GREEN}\"$commit_message\"${NC}"
+        else
+            print_info "squish raw response: ${RED}<empty>${NC}"
+        fi
+        if [ -n "$squish_stderr" ]; then
+            print_info "squish stderr: ${YELLOW}$(echo "$squish_stderr" | head -3)${NC}"
+        fi
+        echo ""
+
+        # Check if timeout occurred or empty response
+        if [ $exit_code -eq 124 ]; then
+            print_warning "squish timed out after ${TIMEOUT_SECONDS}s. Using fallback message."
+            commit_message="$fallback_message"
+        elif [ -z "$commit_message" ]; then
+            print_warning "squish returned empty response. Using fallback message."
+            commit_message="$fallback_message"
+        else
+            print_success "squish responded successfully"
+        fi
     fi
 fi
 
