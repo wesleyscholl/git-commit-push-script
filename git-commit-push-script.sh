@@ -17,8 +17,6 @@ SQUISH_MODEL="${SQUISH_MODEL:-}"
 # Squish server port — override if you run multiple squish servers concurrently.
 SQUISH_PORT="${SQUISH_PORT:-8000}"
 
-#test
-
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
