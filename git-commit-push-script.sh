@@ -17,6 +17,8 @@ SQUISH_MODEL="${SQUISH_MODEL:-}"
 # Squish server port — override if you run multiple squish servers concurrently.
 SQUISH_PORT="${SQUISH_PORT:-8000}"
 
+#test
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -139,92 +141,84 @@ fi
 # Get the git diff (staged changes vs last commit) - truncate for performance
 diff=$(git diff --cached | head -c $MAX_DIFF_CHARS)
 
-# Skip LLM if diff is too large (use fallback)
-diff_size=$(git diff --cached | wc -c | tr -d ' ')
-if [ "$diff_size" -gt 10000 ]; then
-    print_warning "Large diff detected (${diff_size} chars). Using fallback."
-    commit_message="$fallback_message"
+# Squish local LLM — no API key, no rate limits, no cloud
+# Server auto-starts on first use (~20s), then stays alive for near-instant responses
+
+# Build model / port flags from config vars (empty = squish auto-detects)
+SQUISH_FLAGS=""
+if [ -n "$SQUISH_MODEL" ]; then
+    SQUISH_FLAGS="--model $SQUISH_MODEL"
+fi
+if [ -n "$SQUISH_PORT" ]; then
+    SQUISH_FLAGS="$SQUISH_FLAGS --port $SQUISH_PORT"
+fi
+
+# ── Debug: squish availability ───────────────────────────────────────────
+SQUISH_BIN=$(command -v squish 2>/dev/null)
+if [ -n "$SQUISH_BIN" ]; then
+    print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
 else
-    # Squish local LLM — no API key, no rate limits, no cloud
-    # Server auto-starts on first use (~20s), then stays alive for near-instant responses
+    print_warning "squish not found in PATH — will use fallback message"
+    commit_message="$fallback_message"
+fi
 
-    # Build model / port flags from config vars (empty = squish auto-detects)
-    SQUISH_FLAGS=""
+if [ -n "$SQUISH_BIN" ]; then
+    # Show which model / port will be used
     if [ -n "$SQUISH_MODEL" ]; then
-        SQUISH_FLAGS="--model $SQUISH_MODEL"
-    fi
-    if [ -n "$SQUISH_PORT" ]; then
-        SQUISH_FLAGS="$SQUISH_FLAGS --port $SQUISH_PORT"
-    fi
-
-    # ── Debug: squish availability ───────────────────────────────────────────
-    SQUISH_BIN=$(command -v squish 2>/dev/null)
-    if [ -n "$SQUISH_BIN" ]; then
-        print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
+        print_info "squish model: ${CYAN}$SQUISH_MODEL${NC}"
     else
-        print_warning "squish not found in PATH — will use fallback message"
-        commit_message="$fallback_message"
-        # Skip straight to the fallback (jump past the squish block)
+        print_info "squish model: ${GRAY}auto-detect${NC}"
     fi
+    print_info "squish port:  ${CYAN}${SQUISH_PORT:-8000}${NC}"
+    print_info "squish flags: ${GRAY}${SQUISH_FLAGS:-<none>}${NC}"
 
-    if [ -n "$SQUISH_BIN" ]; then
-        # Show which model / port will be used
-        if [ -n "$SQUISH_MODEL" ]; then
-            print_info "squish model: ${CYAN}$SQUISH_MODEL${NC}"
-        else
-            print_info "squish model: ${GRAY}auto-detect${NC}"
-        fi
-        print_info "squish port:  ${CYAN}${SQUISH_PORT:-8000}${NC}"
-        print_info "squish flags: ${GRAY}${SQUISH_FLAGS:-<none>}${NC}"
+    # Check if a server is already listening on the port
+    _port="${SQUISH_PORT:-8000}"
+    if nc -z 127.0.0.1 "$_port" 2>/dev/null; then
+        print_info "squish server: ${GREEN}already running on :$_port${NC}"
+    else
+        print_info "squish server: ${YELLOW}not running — squish will auto-start (first call ~20–90s)${NC}"
+    fi
+    echo ""
 
-        # Check if a server is already listening on the port
-        _port="${SQUISH_PORT:-8000}"
-        if nc -z 127.0.0.1 "$_port" 2>/dev/null; then
-            print_info "squish server: ${GREEN}already running on :$_port${NC}"
-        else
-            print_info "squish server: ${YELLOW}not running — squish will auto-start (first call ~20–90s)${NC}"
-        fi
-        echo ""
+    # Prompt — send full diff, truncated only at MAX_DIFF_CHARS for token sanity
+    PROMPT="Git commit message (max 50 chars, no quotes/formatting):
+$diff"
 
-        # Optimized prompt - shorter, more direct
-        PROMPT="Git commit message (max 50 chars, no quotes/formatting):
-$(echo "$diff" | head -50)"
+    # Run squish with timeout and spinner
+    print_step "Asking AI for commit message (Squish local LLM)..."
+    # shellcheck disable=SC2086  # SQUISH_FLAGS intentionally word-splits for multi-flag support
+    echo "$PROMPT" | timeout $TIMEOUT_SECONDS squish run $SQUISH_FLAGS --max-tokens 60 --temperature 0.2 2>/tmp/squish_stderr.txt | head -1 > /tmp/commit_msg.txt &
+    LLM_PID=$!
+    spinner $LLM_PID
+    wait $LLM_PID
+    exit_code=$?
 
-        # Run squish with timeout and spinner
-        print_step "Asking AI for commit message (Squish local LLM)..."
-        # shellcheck disable=SC2086  # SQUISH_FLAGS intentionally word-splits for multi-flag support
-        echo "$PROMPT" | timeout $TIMEOUT_SECONDS squish run $SQUISH_FLAGS --max-tokens 60 --temperature 0.2 2>/tmp/squish_stderr.txt | head -1 > /tmp/commit_msg.txt &
-        LLM_PID=$!
-        spinner $LLM_PID
-        wait $LLM_PID
-        exit_code=$?
+    # ── Debug: result diagnostics ─────────────────────────────────────────
+    commit_message=$(cat /tmp/commit_msg.txt 2>/dev/null)
+    squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
+    rm -f /tmp/commit_msg.txt /tmp/squish_stderr.txt
 
-        # ── Debug: result diagnostics ─────────────────────────────────────────
-        commit_message=$(cat /tmp/commit_msg.txt 2>/dev/null)
-        squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
-        rm -f /tmp/commit_msg.txt /tmp/squish_stderr.txt
+    print_info "squish exit code: ${CYAN}$exit_code${NC}"
+    if [ -n "$commit_message" ]; then
+        print_info "squish raw response: ${GREEN}\"$commit_message\"${NC}"
+    else
+        print_info "squish raw response: ${RED}<empty>${NC}"
+    fi
+    if [ -n "$squish_stderr" ]; then
+        print_info "squish stderr: ${YELLOW}$(echo "$squish_stderr" | head -3)${NC}"
+    fi
+    echo ""
 
-        print_info "squish exit code: ${CYAN}$exit_code${NC}"
-        if [ -n "$commit_message" ]; then
-            print_info "squish raw response: ${GREEN}\"$commit_message\"${NC}"
-        else
-            print_info "squish raw response: ${RED}<empty>${NC}"
-        fi
-        if [ -n "$squish_stderr" ]; then
-            print_info "squish stderr: ${YELLOW}$(echo "$squish_stderr" | head -3)${NC}"
-        fi
-        echo ""
-
-        # Check if timeout occurred or empty response
-        if [ $exit_code -eq 124 ]; then
-            print_warning "squish timed out after ${TIMEOUT_SECONDS}s. Using fallback message."
-            commit_message="$fallback_message"
-        elif [ -z "$commit_message" ]; then
-            print_warning "squish returned empty response. Using fallback message."
-            commit_message="$fallback_message"
-        else
-            print_success "squish responded successfully"
-        fi
+    # Check if timeout occurred or empty response
+    if [ $exit_code -eq 124 ]; then
+        print_warning "squish timed out after ${TIMEOUT_SECONDS}s. Using fallback message."
+        commit_message="$fallback_message"
+    elif [ -z "$commit_message" ]; then
+        print_warning "squish returned empty response. Using fallback message."
+        commit_message="$fallback_message"
+    else
+        print_success "squish responded successfully"
     fi
 fi
 
