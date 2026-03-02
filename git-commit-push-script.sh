@@ -152,6 +152,7 @@ if [ -n "$SQUISH_PORT" ]; then
 fi
 
 # ── Debug: squish availability ───────────────────────────────────────────
+
 # squish may be a zsh alias (not visible to bash scripts) — fall back to
 # calling cli.py directly with python3 if the command isn't on PATH.
 SQUISH_BIN=$(command -v squish 2>/dev/null)
