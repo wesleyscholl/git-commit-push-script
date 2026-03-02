@@ -152,7 +152,7 @@ if [ -n "$SQUISH_PORT" ]; then
 fi
 
 # ── Debug: squish availability ───────────────────────────────────────────
-SQUISH_BIN=$(squish --version 2>/dev/null)
+SQUISH_BIN=$(squish --version)
 if [ -n "$SQUISH_BIN" ]; then
     print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
 else
