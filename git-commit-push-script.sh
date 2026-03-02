@@ -3,7 +3,7 @@ source ~/.bash_profile
 
 # Configuration
 MAX_DIFF_CHARS=2000      # Truncate diff to prevent long processing
-TIMEOUT_SECONDS=45       # Max time to wait for LLM response (squish auto-starts server on first run)
+TIMEOUT_SECONDS=120      # Max time to wait for LLM response (14B model can take 60-90s on first token)
 MAX_COMMIT_LENGTH=50     # Max characters for commit message
 
 # Squish model selection — set SQUISH_MODEL to target a specific compressed model.
@@ -267,9 +267,14 @@ except Exception:
 
         print_info "squish exit code: ${CYAN}$exit_code${NC}"
         if [ -n "$commit_message" ]; then
-            print_info "squish raw response: ${GREEN}\"$commit_message\"${NC}"
+            print_info "squish parsed message: ${GREEN}\"$commit_message\"${NC}"
         else
-            print_info "squish raw response: ${RED}<empty>${NC}"
+            print_info "squish parsed message: ${RED}<empty>${NC}"
+            if [ -n "$raw_response" ]; then
+                print_info "squish raw body: ${YELLOW}$(echo "$raw_response" | head -c 500)${NC}"
+            else
+                print_info "squish raw body: ${RED}<no response from server>${NC}"
+            fi
         fi
         if [ -n "$squish_stderr" ]; then
             print_info "squish stderr: ${YELLOW}$(echo "$squish_stderr" | head -3)${NC}"
@@ -277,8 +282,8 @@ except Exception:
         echo ""
 
         # Check if timeout occurred or empty response
-        if [ $exit_code -eq 124 ]; then
-            print_warning "squish timed out after ${TIMEOUT_SECONDS}s. Using fallback message."
+        if [ $exit_code -eq 28 ] || [ $exit_code -eq 124 ]; then
+            print_warning "squish timed out after ${TIMEOUT_SECONDS}s (exit $exit_code). Using fallback message."
             commit_message="$fallback_message"
         elif [ -z "$commit_message" ]; then
             print_warning "squish returned empty response. Using fallback message."
