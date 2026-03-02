@@ -152,8 +152,13 @@ if [ -n "$SQUISH_PORT" ]; then
 fi
 
 # ── Debug: squish availability ───────────────────────────────────────────
-SQUISH_BIN=$(command squish --version 2>/dev/null)
-if [ -n "$SQUISH_BIN" ]; then
+# squish may be a zsh alias (not visible to bash scripts) — fall back to
+# calling cli.py directly with python3 if the command isn't on PATH.
+SQUISH_BIN=$(command -v squish 2>/dev/null)
+if [ -z "$SQUISH_BIN" ] && [ -f "/Users/wscholl/squish/cli.py" ]; then
+    SQUISH_BIN="python3 /Users/wscholl/squish/cli.py"
+    print_info "squish binary: ${CYAN}$SQUISH_BIN${GRAY} (alias not in bash PATH, using direct path)${NC}"
+elif [ -n "$SQUISH_BIN" ]; then
     print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
 else
     print_warning "squish not found in PATH — will use fallback message"
@@ -186,7 +191,7 @@ $diff"
     # Run squish with timeout and spinner
     print_step "Asking AI for commit message (Squish local LLM)..."
     # shellcheck disable=SC2086  # SQUISH_FLAGS intentionally word-splits for multi-flag support
-    echo "$PROMPT" | timeout $TIMEOUT_SECONDS squish run $SQUISH_FLAGS --max-tokens 60 --temperature 0.2 2>/tmp/squish_stderr.txt | head -1 > /tmp/commit_msg.txt &
+    echo "$PROMPT" | timeout $TIMEOUT_SECONDS $SQUISH_BIN run $SQUISH_FLAGS --max-tokens 60 --temperature 0.2 2>/tmp/squish_stderr.txt | head -1 > /tmp/commit_msg.txt &
     LLM_PID=$!
     spinner $LLM_PID
     wait $LLM_PID
