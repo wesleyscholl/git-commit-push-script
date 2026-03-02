@@ -203,8 +203,39 @@ if [ -n "$SQUISH_BIN" ]; then
         stat_summary=$(git diff --cached --stat | tail -1)
         changed_names=$(git diff --cached --name-only | head -10 | tr '\n' ' ')
 
-        PAYLOAD=$(printf '{"model":"squish","messages":[{"role":"system","content":"You generate concise git commit messages. Reply with ONLY the commit message, nothing else. Max 50 characters. Imperative mood. No period. No quotes. No markdown."},{"role":"user","content":"Files changed: %s\nSummary: %s\n\nDiff:\n%s\n\nCommit message:"}],"max_tokens":60,"temperature":0.2,"stream":false}' \
-            "$changed_names" "$stat_summary" "$diff")
+        # Write diff to a temp file so Python can read it without any
+        # shell-interpolation escaping issues (newlines, backslashes, etc.)
+        echo "$diff" > /tmp/squish_diff.txt
+
+        # Use python3 to build the JSON payload — all values go through
+        # json.dumps() so control characters are properly escaped.
+        PAYLOAD=$(SQUISH_CHANGED="$changed_names" SQUISH_STAT="$stat_summary" \
+            python3 - <<'PYEOF'
+import json, os
+system = (
+    "You generate concise git commit messages. "
+    "Reply with ONLY the commit message, nothing else. "
+    "Max 50 characters. Imperative mood. No period. No quotes. No markdown."
+)
+diff = open("/tmp/squish_diff.txt").read()
+user = (
+    f"Files changed: {os.environ['SQUISH_CHANGED']}\n"
+    f"Summary: {os.environ['SQUISH_STAT']}\n\n"
+    f"Diff:\n{diff}\n\nCommit message:"
+)
+print(json.dumps({
+    "model": "squish",
+    "messages": [
+        {"role": "system", "content": system},
+        {"role": "user",   "content": user},
+    ],
+    "max_tokens": 60,
+    "temperature": 0.2,
+    "stream": False,
+}))
+PYEOF
+        )
+        rm -f /tmp/squish_diff.txt
 
         # Run squish with timeout and spinner
         print_step "Asking AI for commit message (Squish local LLM)..."
