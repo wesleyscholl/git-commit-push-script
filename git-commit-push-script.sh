@@ -2,8 +2,8 @@
 source ~/.bash_profile
 
 # Configuration
-MAX_DIFF_CHARS=600       # stripped +/- lines only — keeps 1.5B prefill fast
-TIMEOUT_SECONDS=60       # 60s covers multi-file commits on the 1.5B model
+MAX_DIFF_CHARS=300       # ~75 input tokens — halves prefill vs 600
+TIMEOUT_SECONDS=30       # 7B INT4 generates 15 tokens well under 10s warm
 MAX_COMMIT_LENGTH=72     # Standard git commit length
 
 # Squish model selection.
@@ -198,8 +198,16 @@ if [ -n "$SQUISH_BIN" ]; then
         print_info "squish server: ${GREEN}already running on :$_port${NC}"
     else
         print_info "squish server: ${YELLOW}not running — starting it now…${NC}"
+        # Draft model for speculative decoding — 1.5B drafts tokens, 7B verifies in
+        # one forward pass. ~2-3x generation speedup; same output quality as 7B alone.
+        _draft_model="${SQUISH_MODELS_DIR}/Qwen2.5-1.5B-Instruct-bf16-int8-bak"
+        _draft_flag=""
+        [ -d "$_draft_model" ] && _draft_flag="--draft-model $_draft_model"
         # Start the server in the background and wait for it
-        $SQUISH_BIN serve ${SQUISH_MODEL:+--model $SQUISH_MODEL} --port "$_port" > /tmp/squish_serve.log 2>&1 &
+        $SQUISH_BIN serve ${SQUISH_MODEL:+--model $SQUISH_MODEL} --port "$_port" \
+            --kv-cache-mode int8 \
+            $_draft_flag \
+            > /tmp/squish_serve.log 2>&1 &
         _serve_pid=$!
         # Run snake spinner in background while polling for server readiness
         snake_spinner "Starting squish server" &
@@ -235,9 +243,9 @@ if [ -n "$SQUISH_BIN" ]; then
         ' | head -c "$MAX_DIFF_CHARS")
 
         # Build JSON payload in pure bash — _json_str escapes all special chars
-        _sys="You are a git commit message writer. Read the diff and write ONE concise commit message describing what actually changed. Reply with ONLY the commit message — no labels, no filenames, no markdown, no period. Must be a complete thought under 72 characters. Imperative mood (e.g. 'Add', 'Fix', 'Update', 'Remove')."
-        _usr="Files: ${changed_names}\nStat: ${stat_summary}\n\nChanged lines:\n${stripped_diff}\n--- END DIFF ---\n\nCommit message (imperative, < 72 chars):"
-        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":50,"temperature":0.2,"stream":false,"stop":["\n","\r"]}'
+        _sys="Write a git commit message. Imperative mood, under 72 chars, no punctuation. Reply with ONLY the message."
+        _usr="Files: ${changed_names}\nStat: ${stat_summary}\nDiff:\n${stripped_diff}"
+        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":20,"temperature":0.2,"stream":false,"stop":["\n","\r"]}'
 
         # Run squish — curl in background, spinner inline in foreground (no subprocess)
         print_step "Asking AI for commit message (Squish local LLM)..."
