@@ -39,23 +39,24 @@ snake_spinner() {
     local frames=('⣾' '⣽' '⣻' '⢿' '⡿' '⣟' '⣯' '⣷')
     local col_arr=("$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE")
     local nf=${#frames[@]}
-    local ncol=${#col_arr[@]}
     local i=0 step=0
-    local delay=0.08
-    local elapsed="0.0"
+    # 0.1s delay → 10 steps = 1s; use pure bash integer math (no bc fork)
+    local delay=0.1
 
     while true; do
-        if [ "$pid" -ne 0 ] && ! ps -p "$pid" > /dev/null 2>&1; then
+        # kill -0 is a bash builtin — no subprocess fork unlike ps -p
+        if [ "$pid" -ne 0 ] && ! kill -0 "$pid" 2>/dev/null; then
             break
         fi
 
+        local secs=$(( step / 10 ))
+        local tenths=$(( step % 10 ))
         local c="${col_arr[$i]}"
-        printf "\r${c}${frames[$i]}${NC} ${WHITE}${label}${NC}${GRAY}...${NC} ${DIM}(${elapsed}s)${NC}  "
+        printf "\r${c}${frames[$i]}${NC} ${WHITE}${label}${NC}${GRAY}...${NC} ${DIM}(${secs}.${tenths}s)${NC}  "
 
         sleep "$delay"
         i=$(( (i + 1) % nf ))
         step=$(( step + 1 ))
-        elapsed=$(echo "scale=1; $step * $delay" | bc)
     done
     printf "\r${GREEN}✓${NC} ${WHITE}Done!${NC}                                          \n"
 }
