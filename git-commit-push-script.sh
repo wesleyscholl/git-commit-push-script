@@ -256,7 +256,7 @@ if [ -n "$SQUISH_BIN" ]; then
         while kill -0 "$LLM_PID" 2>/dev/null; do
             _secs=$(( _step / 10 )); _tenths=$(( _step % 10 ))
             printf "\r${_sp_cols[$_si]}${_sp_frames[$_si]}${NC} ${WHITE}Generating commit message${NC}${GRAY}...${NC} ${DIM}(${_secs}.${_tenths}s)${NC}  "
-            read -t 0.1 </dev/null 2>/dev/null || true
+            sleep 0.1
             _si=$(( (_si + 1) % 8 ))
             _step=$(( _step + 1 ))
         done
