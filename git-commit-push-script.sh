@@ -9,7 +9,7 @@ MAX_COMMIT_LENGTH=72     # Standard git commit length
 # Squish model selection.
 # qwen3:8b INT4 (~4.5 GB) — best quality on M3 16GB, ~22 tok/s generate.
 # Override: SQUISH_MODEL=qwen3:4b cm  (faster, slightly lower quality)
-SQUISH_MODEL="${SQUISH_MODEL:-7b}"
+SQUISH_MODEL="${SQUISH_MODEL:-1.5b}"
 
 # Squish server port — must match the port squish is started with.
 # CLI default is 11435; override with SQUISH_PORT env var.
