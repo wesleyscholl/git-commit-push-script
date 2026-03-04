@@ -7,10 +7,9 @@ TIMEOUT_SECONDS=30       # 7B INT4 generates 15 tokens well under 10s warm
 MAX_COMMIT_LENGTH=72     # Standard git commit length
 
 # Squish model selection.
-# 7B runs at 15-25 tok/s on M3 16GB (comfortably fits in memory).
-# 14B is too slow on 16GB — use it only if you have 32GB+ RAM.
-# Override: SQUISH_MODEL=14b cm
-SQUISH_MODEL="${SQUISH_MODEL:-1.5b cm}"
+# qwen3:8b INT4 (~4.5 GB) — best quality on M3 16GB, ~22 tok/s generate.
+# Override: SQUISH_MODEL=qwen3:4b cm  (faster, slightly lower quality)
+SQUISH_MODEL="${SQUISH_MODEL:-qwen3:8b}"
 
 # Squish server port — must match the port squish is started with.
 # CLI default is 11435; override with SQUISH_PORT env var.
