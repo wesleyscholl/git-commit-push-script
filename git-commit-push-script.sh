@@ -29,6 +29,18 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m' # No Color
 
+# Escape a string for safe embedding in a JSON value.
+# Uses only bash parameter expansion — zero subprocess forks.
+_json_str() {
+    local s="${1//\\/\\\\}"  # \ → \\
+    local _q='"'
+    s="${s//$_q/\\$_q}"      # " → \"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\t'/\\t}"
+    s="${s//$'\r'/\\r}"
+    printf '%s' "$s"
+}
+
 # Snake spinner — loops forever until killed by the caller.
 # Usage: snake_spinner [label]
 #   Run in background (&), capture PID, kill after the task completes.
@@ -214,69 +226,22 @@ if [ -n "$SQUISH_BIN" ]; then
         stat_summary=$(git diff --cached --stat | tail -1)
         changed_names=$(git diff --cached --name-only | head -10 | tr '\n' ' ')
 
-        # Write diff to a temp file so Python reads it safely
-        echo "$diff" > /tmp/squish_diff.txt
+        # Strip diff to +/- lines only (awk, no Python)
+        stripped_diff=$(git diff --cached | awk '
+            /^---/ || /^\+\+\+/                                        { next }
+            /^diff / || /^index / || /^new file/ || /^deleted file/  { next }
+            /^@@/ { sub(/^@@[^@]*@@ */, ""); print (length($0)>0 ? $0 : "~~"); next }
+            /^\+/ || /^-/                                             { print }
+        ' | head -c "$MAX_DIFF_CHARS")
 
-        # Use python3 to build the JSON payload — all values go through
-        # json.dumps() so control characters are properly escaped.
-        PAYLOAD=$(SQUISH_CHANGED="$changed_names" SQUISH_STAT="$stat_summary" MAX_DIFF_CHARS="$MAX_DIFF_CHARS" \
-            python3 - <<'PYEOF'
-import json, os, re
+        # Build JSON payload in pure bash — _json_str escapes all special chars
+        _sys="You are a git commit message writer. Read the diff and write ONE concise commit message describing what actually changed. Reply with ONLY the commit message — no labels, no filenames, no markdown, no period. Must be a complete thought under 72 characters. Imperative mood (e.g. 'Add', 'Fix', 'Update', 'Remove')."
+        _usr="Files: ${changed_names}\nStat: ${stat_summary}\n\nChanged lines:\n${stripped_diff}\n--- END DIFF ---\n\nCommit message (imperative, < 72 chars):"
+        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":50,"temperature":0.2,"stream":false,"stop":["\n","\r"]}'
 
-def strip_diff(raw: str, max_chars: int) -> str:
-    """Keep only added/removed lines; skip headers and unchanged context."""
-    lines = []
-    for line in raw.splitlines():
-        # +++ / --- are file headers — skip
-        if line.startswith("---") or line.startswith("+++"):
-            continue
-        # @@ hunk headers — include as section markers but shorten
-        if line.startswith("@@"):
-            lines.append(line.split("@@")[-1].strip() or "~~")
-            continue
-        # diff --git / index headers — skip
-        if line.startswith("diff ") or line.startswith("index ") or line.startswith("new file") or line.startswith("deleted file"):
-            continue
-        # Keep + / - changed lines, drop unchanged context lines
-        if line.startswith("+") or line.startswith("-"):
-            lines.append(line)
-    return "\n".join(lines)[:max_chars]
-
-diff_raw = open("/tmp/squish_diff.txt").read()
-diff = strip_diff(diff_raw, int(os.environ.get("MAX_DIFF_CHARS", "1200")))
-
-system = (
-    "You are a git commit message writer. "
-    "Read the diff and write ONE concise commit message describing what actually changed. "
-    "Reply with ONLY the commit message — no labels, no filenames, no markdown, no period. "
-    "Must be a complete thought under 72 characters. Imperative mood (e.g. 'Add', 'Fix', 'Update', 'Remove')."
-)
-user = (
-    f"Files: {os.environ['SQUISH_CHANGED']}\n"
-    f"Stat: {os.environ['SQUISH_STAT']}\n\n"
-    f"Changed lines:\n{diff}\n"
-    "--- END DIFF ---\n\n"
-    "Commit message (imperative, < 72 chars):"
-)
-print(json.dumps({
-    "model": "squish",
-    "messages": [
-        {"role": "system", "content": system},
-        {"role": "user",   "content": user},
-    ],
-    "max_tokens": 50,
-    "temperature": 0.2,
-    "stream": False,
-    "stop": ["\n", "\r"],
-}))
-PYEOF
-        )
-        rm -f /tmp/squish_diff.txt
-
-        # Run squish with timeout and spinner
+        # Run squish — curl in background, spinner inline in foreground (no subprocess)
         print_step "Asking AI for commit message (Squish local LLM)..."
         _port="${SQUISH_PORT:-11435}"
-        _llm_start=$SECONDS
         curl -s --max-time $TIMEOUT_SECONDS \
             -X POST "http://127.0.0.1:${_port}/v1/chat/completions" \
             -H "Content-Type: application/json" \
@@ -284,31 +249,31 @@ PYEOF
             -d "$PAYLOAD" 2>/tmp/squish_stderr.txt \
             > /tmp/squish_response.txt &
         LLM_PID=$!
-        # Spinner runs in background; wait reaps curl immediately in foreground
-        snake_spinner "Generating commit message" &
-        _SPINNER_PID=$!
-        wait $LLM_PID
+        # Inline spinner — runs in the main shell, no subprocess, no background PID
+        _sp_frames=('⣾' '⣽' '⣻' '⢿' '⡿' '⣟' '⣯' '⣷')
+        _sp_cols=("$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE")
+        _si=0; _step=0
+        while kill -0 "$LLM_PID" 2>/dev/null; do
+            _secs=$(( _step / 10 )); _tenths=$(( _step % 10 ))
+            printf "\r${_sp_cols[$_si]}${_sp_frames[$_si]}${NC} ${WHITE}Generating commit message${NC}${GRAY}...${NC} ${DIM}(${_secs}.${_tenths}s)${NC}  "
+            read -t 0.1 </dev/null 2>/dev/null || true
+            _si=$(( (_si + 1) % 8 ))
+            _step=$(( _step + 1 ))
+        done
+        wait $LLM_PID   # reap immediately — zombie cleared within one loop tick
         exit_code=$?
-        kill $_SPINNER_PID 2>/dev/null
-        wait $_SPINNER_PID 2>/dev/null
         printf "\r${GREEN}✓${NC} ${WHITE}Done!${NC}                                          \n"
-        _llm_elapsed=$(( SECONDS - _llm_start ))
-        print_info "model response time: ${CYAN}${_llm_elapsed}s${NC}"
+        # step is already in tenths of a second — free decimal timing, no extra call
+        _llm_secs=$(( _step / 10 )); _llm_tenths=$(( _step % 10 ))
+        print_info "model response time: ${CYAN}${_llm_secs}.${_llm_tenths}s${NC}"
 
         # ── Debug: result diagnostics ─────────────────────────────────────────
         raw_response=$(cat /tmp/squish_response.txt 2>/dev/null)
         squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
         rm -f /tmp/squish_response.txt /tmp/squish_stderr.txt
 
-        # Extract the message content from the JSON response
-        commit_message=$(echo "$raw_response" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    print(data['choices'][0]['message']['content'].strip())
-except Exception:
-    pass
-" 2>/dev/null)
+        # Extract content field from JSON response with sed — no Python
+        commit_message=$(printf '%s' "$raw_response" | sed 's/.*"content":"\([^"]*\)".*/\1/' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
         print_info "squish exit code: ${CYAN}$exit_code${NC}"
         if [ -n "$commit_message" ]; then
