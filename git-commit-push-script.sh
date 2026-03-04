@@ -3,7 +3,7 @@ source ~/.bash_profile
 
 # Configuration
 MAX_DIFF_CHARS=300       # ~75 input tokens — halves prefill vs 600
-TIMEOUT_SECONDS=30       # 7B INT4 generates 15 tokens well under 10s warm
+TIMEOUT_SECONDS=120      # covers cold model.load_weights() (~90s) + inference
 MAX_COMMIT_LENGTH=72     # Standard git commit length
 
 # Squish model selection.
