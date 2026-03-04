@@ -2,20 +2,19 @@
 source ~/.bash_profile
 
 # Configuration
-MAX_DIFF_CHARS=2000      # Truncate diff to prevent long processing
-TIMEOUT_SECONDS=120      # Max time to wait for LLM response (14B model can take 60-90s on first token)
-MAX_COMMIT_LENGTH=50     # Max characters for commit message
+MAX_DIFF_CHARS=600       # stripped +/- lines only — keeps 1.5B prefill fast
+TIMEOUT_SECONDS=60       # 60s covers multi-file commits on the 1.5B model
+MAX_COMMIT_LENGTH=72     # Standard git commit length
 
-# Squish model selection — set SQUISH_MODEL to target a specific compressed model.
-# Accepts a name hint (e.g. "14b", "7b") or a full path to a model directory.
-# Leave empty to let squish auto-detect (uses the first available model in ~/models).
-# Examples:
-#   SQUISH_MODEL="14b"                                      # matches Qwen2.5-14B-*
-#   SQUISH_MODEL="$HOME/models/Qwen2.5-14B-Instruct-bf16"  # explicit path
-SQUISH_MODEL="${SQUISH_MODEL:-}"
+# Squish model selection.
+# 7B runs at 15-25 tok/s on M3 16GB (comfortably fits in memory).
+# 14B is too slow on 16GB — use it only if you have 32GB+ RAM.
+# Override: SQUISH_MODEL=14b cm
+SQUISH_MODEL="${SQUISH_MODEL:-7b}"
 
-# Squish server port — override if you run multiple squish servers concurrently.
-SQUISH_PORT="${SQUISH_PORT:-8000}"
+# Squish server port — must match the port squish is started with.
+# CLI default is 11435; override with SQUISH_PORT env var.
+SQUISH_PORT="${SQUISH_PORT:-11435}"
 
 # Colors
 RED='\033[0;31m'
@@ -30,25 +29,35 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m' # No Color
 
-# Animated spinner with colors
-spinner() {
+# Snake spinner — cycling snake glyphs while waiting.
+# Usage: snake_spinner PID [label]
+#   PID = 0  → run until killed (for server-start polling)
+#   PID > 0  → run until that process exits (for curl/LLM wait)
+snake_spinner() {
     local pid=$1
-    local delay=0.08
+    local label="${2:-Generating commit message}"
     local frames=('⣾' '⣽' '⣻' '⢿' '⡿' '⣟' '⣯' '⣷')
-    local colors=("$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE")
-    local i=0
-    local elapsed=0
-    
-    while ps -p $pid > /dev/null 2>&1; do
-        printf "\r${colors[$i]}${frames[$i]}${NC} ${WHITE}Generating commit message${NC}${GRAY}...${NC} ${DIM}(${elapsed}s)${NC}  "
-        sleep $delay
-        i=$(( (i + 1) % ${#frames[@]} ))
-        elapsed=$(echo "scale=1; $elapsed + $delay" | bc)
-        if ! ps -p $pid > /dev/null 2>&1; then
+    local col_arr=("$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE")
+    local nf=${#frames[@]}
+    local ncol=${#col_arr[@]}
+    local i=0 step=0
+    local delay=0.08
+    local elapsed="0.0"
+
+    while true; do
+        if [ "$pid" -ne 0 ] && ! ps -p "$pid" > /dev/null 2>&1; then
             break
         fi
+
+        local c="${col_arr[$i]}"
+        printf "\r${c}${frames[$i]}${NC} ${WHITE}${label}${NC}${GRAY}...${NC} ${DIM}(${elapsed}s)${NC}  "
+
+        sleep "$delay"
+        i=$(( (i + 1) % nf ))
+        step=$(( step + 1 ))
+        elapsed=$(echo "scale=1; $step * $delay" | bc)
     done
-    printf "\r${GREEN}✓${NC} ${WHITE}Done!${NC}                              \n"
+    printf "\r${GREEN}✓${NC} ${WHITE}Done!${NC}                                          \n"
 }
 
 # Status messages
@@ -152,11 +161,17 @@ if [ -n "$SQUISH_PORT" ]; then
 fi
 
 # ── Debug: squish availability ───────────────────────────────────────────
-# squish may be a zsh alias (not visible to bash scripts) — fall back to
-# calling cli.py directly with python3 if the command isn't on PATH.
+# squish is typically a zsh alias (not visible to bash scripts) — fall back to
+# calling squish/cli.py directly with python3 if the command isn't on PATH.
+# Also export SQUISH_MODELS_DIR so the CLI finds models in the squish repo.
+export SQUISH_MODELS_DIR="${SQUISH_MODELS_DIR:-$HOME/squish/models}"_SQUISH_CLI="/Users/wscholl/squish/squish/cli.py"
 SQUISH_BIN=$(command -v squish 2>/dev/null)
-if [ -z "$SQUISH_BIN" ] && [ -f "/Users/wscholl/squish/cli.py" ]; then
-    SQUISH_BIN="python3 /Users/wscholl/squish/cli.py"
+# command -v may return an alias definition string in some shells — treat that as not-found
+if echo "$SQUISH_BIN" | grep -q '^alias '; then
+    SQUISH_BIN=""
+fi
+if [ -z "$SQUISH_BIN" ] && [ -f "$_SQUISH_CLI" ]; then
+    SQUISH_BIN="python3 $_SQUISH_CLI"
     print_info "squish binary: ${CYAN}$SQUISH_BIN${GRAY} (alias not in bash PATH, using direct path)${NC}"
 elif [ -n "$SQUISH_BIN" ]; then
     print_info "squish binary: ${CYAN}$SQUISH_BIN${NC}"
@@ -183,11 +198,17 @@ if [ -n "$SQUISH_BIN" ]; then
         # Start the server in the background and wait for it
         $SQUISH_BIN serve ${SQUISH_MODEL:+--model $SQUISH_MODEL} --port "$_port" > /tmp/squish_serve.log 2>&1 &
         _serve_pid=$!
+        # Run snake spinner in background while polling for server readiness
+        snake_spinner 0 "Starting squish server" &
+        _snake_pid=$!
         _waited=0
         while [ $_waited -lt 90 ] && ! nc -z 127.0.0.1 "$_port" 2>/dev/null; do
             sleep 1
             _waited=$((_waited + 1))
         done
+        kill "$_snake_pid" 2>/dev/null
+        wait "$_snake_pid" 2>/dev/null
+        printf "\r                                                                    \r"
         if ! nc -z 127.0.0.1 "$_port" 2>/dev/null; then
             print_warning "Server failed to start. Using fallback message."
             commit_message="$fallback_message"
@@ -198,30 +219,53 @@ if [ -n "$SQUISH_BIN" ]; then
     echo ""
 
     if [ -z "$commit_message" ]; then
-        # Build a focused prompt — only the stat summary + truncated diff,
-        # no surrounding debug text that could confuse the model.
+        # Build a focused prompt — stat summary + truncated diff
         stat_summary=$(git diff --cached --stat | tail -1)
         changed_names=$(git diff --cached --name-only | head -10 | tr '\n' ' ')
 
-        # Write diff to a temp file so Python can read it without any
-        # shell-interpolation escaping issues (newlines, backslashes, etc.)
+        # Write diff to a temp file so Python reads it safely
         echo "$diff" > /tmp/squish_diff.txt
 
         # Use python3 to build the JSON payload — all values go through
         # json.dumps() so control characters are properly escaped.
-        PAYLOAD=$(SQUISH_CHANGED="$changed_names" SQUISH_STAT="$stat_summary" \
+        PAYLOAD=$(SQUISH_CHANGED="$changed_names" SQUISH_STAT="$stat_summary" MAX_DIFF_CHARS="$MAX_DIFF_CHARS" \
             python3 - <<'PYEOF'
-import json, os
+import json, os, re
+
+def strip_diff(raw: str, max_chars: int) -> str:
+    """Keep only added/removed lines; skip headers and unchanged context."""
+    lines = []
+    for line in raw.splitlines():
+        # +++ / --- are file headers — skip
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        # @@ hunk headers — include as section markers but shorten
+        if line.startswith("@@"):
+            lines.append(line.split("@@")[-1].strip() or "~~")
+            continue
+        # diff --git / index headers — skip
+        if line.startswith("diff ") or line.startswith("index ") or line.startswith("new file") or line.startswith("deleted file"):
+            continue
+        # Keep + / - changed lines, drop unchanged context lines
+        if line.startswith("+") or line.startswith("-"):
+            lines.append(line)
+    return "\n".join(lines)[:max_chars]
+
+diff_raw = open("/tmp/squish_diff.txt").read()
+diff = strip_diff(diff_raw, int(os.environ.get("MAX_DIFF_CHARS", "1200")))
+
 system = (
-    "You generate concise git commit messages. "
-    "Reply with ONLY the commit message, nothing else. "
-    "Max 50 characters. Imperative mood. No period. No quotes. No markdown."
+    "You are a git commit message writer. "
+    "Read the diff and write ONE concise commit message describing what actually changed. "
+    "Reply with ONLY the commit message — no labels, no filenames, no markdown, no period. "
+    "Must be a complete thought under 72 characters. Imperative mood (e.g. 'Add', 'Fix', 'Update', 'Remove')."
 )
-diff = open("/tmp/squish_diff.txt").read()
 user = (
-    f"Files changed: {os.environ['SQUISH_CHANGED']}\n"
-    f"Summary: {os.environ['SQUISH_STAT']}\n\n"
-    f"Diff:\n{diff}\n\nCommit message:"
+    f"Files: {os.environ['SQUISH_CHANGED']}\n"
+    f"Stat: {os.environ['SQUISH_STAT']}\n\n"
+    f"Changed lines:\n{diff}\n"
+    "--- END DIFF ---\n\n"
+    "Commit message (imperative, < 72 chars):"
 )
 print(json.dumps({
     "model": "squish",
@@ -229,9 +273,10 @@ print(json.dumps({
         {"role": "system", "content": system},
         {"role": "user",   "content": user},
     ],
-    "max_tokens": 60,
+    "max_tokens": 50,
     "temperature": 0.2,
     "stream": False,
+    "stop": ["\n", "\r"],
 }))
 PYEOF
         )
@@ -239,16 +284,20 @@ PYEOF
 
         # Run squish with timeout and spinner
         print_step "Asking AI for commit message (Squish local LLM)..."
-        _port="${SQUISH_PORT:-8000}"
+        _port="${SQUISH_PORT:-11435}"
+        _llm_start=$(date +%s%3N)
         curl -s --max-time $TIMEOUT_SECONDS \
             -X POST "http://127.0.0.1:${_port}/v1/chat/completions" \
             -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${SQUISH_API_KEY:-squish}" \
             -d "$PAYLOAD" 2>/tmp/squish_stderr.txt \
             > /tmp/squish_response.txt &
         LLM_PID=$!
-        spinner $LLM_PID
+        snake_spinner $LLM_PID "Generating commit message"
         wait $LLM_PID
         exit_code=$?
+        _llm_elapsed=$(echo "scale=2; ($(date +%s%3N) - $_llm_start) / 1000" | bc)
+        print_info "model response time: ${CYAN}${_llm_elapsed}s${NC}"
 
         # ── Debug: result diagnostics ─────────────────────────────────────────
         raw_response=$(cat /tmp/squish_response.txt 2>/dev/null)
