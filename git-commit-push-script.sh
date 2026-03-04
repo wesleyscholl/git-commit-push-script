@@ -14,8 +14,7 @@ SQUISH_MODEL="${SQUISH_MODEL:-1.5b}"
 # Squish server port — must match the port squish is started with.
 # CLI default is 11435; override with SQUISH_PORT env var.
 SQUISH_PORT="${SQUISH_PORT:-11435}"
-
-
+# test comment
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
