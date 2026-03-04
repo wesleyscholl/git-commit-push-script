@@ -10,7 +10,7 @@ MAX_COMMIT_LENGTH=72     # Standard git commit length
 # 7B runs at 15-25 tok/s on M3 16GB (comfortably fits in memory).
 # 14B is too slow on 16GB — use it only if you have 32GB+ RAM.
 # Override: SQUISH_MODEL=14b cm
-SQUISH_MODEL="${SQUISH_MODEL:-7b}"
+SQUISH_MODEL="${SQUISH_MODEL:-1.5b cm}"
 
 # Squish server port — must match the port squish is started with.
 # CLI default is 11435; override with SQUISH_PORT env var.
