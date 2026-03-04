@@ -29,36 +29,26 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m' # No Color
 
-# Snake spinner — cycling snake glyphs while waiting.
-# Usage: snake_spinner PID [label]
-#   PID = 0  → run until killed (for server-start polling)
-#   PID > 0  → run until that process exits (for curl/LLM wait)
+# Snake spinner — loops forever until killed by the caller.
+# Usage: snake_spinner [label]
+#   Run in background (&), capture PID, kill after the task completes.
 snake_spinner() {
-    local pid=$1
-    local label="${2:-Generating commit message}"
+    local label="${1:-Generating commit message}"
     local frames=('⣾' '⣽' '⣻' '⢿' '⡿' '⣟' '⣯' '⣷')
     local col_arr=("$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE" "$PURPLE" "$CYAN" "$BLUE")
     local nf=${#frames[@]}
     local i=0 step=0
-    # 0.1s delay → 10 steps = 1s; use pure bash integer math (no bc fork)
-    local delay=0.1
 
     while true; do
-        # kill -0 is a bash builtin — no subprocess fork unlike ps -p
-        if [ "$pid" -ne 0 ] && ! kill -0 "$pid" 2>/dev/null; then
-            break
-        fi
-
         local secs=$(( step / 10 ))
         local tenths=$(( step % 10 ))
         local c="${col_arr[$i]}"
         printf "\r${c}${frames[$i]}${NC} ${WHITE}${label}${NC}${GRAY}...${NC} ${DIM}(${secs}.${tenths}s)${NC}  "
-
-        sleep "$delay"
+        # read -t is a bash builtin — zero subprocess forks vs sleep
+        read -t 0.1 </dev/null 2>/dev/null || true
         i=$(( (i + 1) % nf ))
         step=$(( step + 1 ))
     done
-    printf "\r${GREEN}✓${NC} ${WHITE}Done!${NC}                                          \n"
 }
 
 # Status messages
@@ -200,7 +190,7 @@ if [ -n "$SQUISH_BIN" ]; then
         $SQUISH_BIN serve ${SQUISH_MODEL:+--model $SQUISH_MODEL} --port "$_port" > /tmp/squish_serve.log 2>&1 &
         _serve_pid=$!
         # Run snake spinner in background while polling for server readiness
-        snake_spinner 0 "Starting squish server" &
+        snake_spinner "Starting squish server" &
         _snake_pid=$!
         _waited=0
         while [ $_waited -lt 90 ] && ! nc -z 127.0.0.1 "$_port" 2>/dev/null; do
@@ -286,7 +276,7 @@ PYEOF
         # Run squish with timeout and spinner
         print_step "Asking AI for commit message (Squish local LLM)..."
         _port="${SQUISH_PORT:-11435}"
-        _llm_start=$(date +%s%3N)
+        _llm_start=$SECONDS
         curl -s --max-time $TIMEOUT_SECONDS \
             -X POST "http://127.0.0.1:${_port}/v1/chat/completions" \
             -H "Content-Type: application/json" \
@@ -294,10 +284,15 @@ PYEOF
             -d "$PAYLOAD" 2>/tmp/squish_stderr.txt \
             > /tmp/squish_response.txt &
         LLM_PID=$!
-        snake_spinner $LLM_PID "Generating commit message"
+        # Spinner runs in background; wait reaps curl immediately in foreground
+        snake_spinner "Generating commit message" &
+        _SPINNER_PID=$!
         wait $LLM_PID
         exit_code=$?
-        _llm_elapsed=$(echo "scale=2; ($(date +%s%3N) - $_llm_start) / 1000" | bc)
+        kill $_SPINNER_PID 2>/dev/null
+        wait $_SPINNER_PID 2>/dev/null
+        printf "\r${GREEN}✓${NC} ${WHITE}Done!${NC}                                          \n"
+        _llm_elapsed=$(( SECONDS - _llm_start ))
         print_info "model response time: ${CYAN}${_llm_elapsed}s${NC}"
 
         # ── Debug: result diagnostics ─────────────────────────────────────────
