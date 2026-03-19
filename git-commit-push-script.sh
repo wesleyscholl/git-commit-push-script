@@ -279,8 +279,23 @@ if [ -n "$SQUISH_BIN" ]; then
         squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
         rm -f /tmp/squish_response.txt /tmp/squish_stderr.txt
 
-        # Extract content field from JSON response with sed — no Python
-        commit_message=$(printf '%s' "$raw_response" | sed 's/.*"content":"\([^"]*\)".*/\1/' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        # Extract content from JSON robustly, then strip any CoT tags.
+        # Prefer jq when available; keep a shell-only fallback.
+        if command -v jq >/dev/null 2>&1; then
+            commit_message=$(printf '%s' "$raw_response" | jq -r '.choices[0].message.content // .message.content // empty' 2>/dev/null)
+        else
+            commit_message=$(printf '%s' "$raw_response" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p')
+            commit_message=${commit_message//\\n/$'\n'}
+            commit_message=${commit_message//\\r/$'\r'}
+            commit_message=${commit_message//\\t/$'\t'}
+            commit_message=${commit_message//\\\//\/}
+            commit_message=${commit_message//\\\"/\"}
+            commit_message=${commit_message//\\u003c/<}
+            commit_message=${commit_message//\\u003e/>}
+        fi
+
+        # Remove <think>...</think> even when it spans multiple lines.
+        commit_message=$(printf '%s' "$commit_message" | perl -0777 -pe 's#<think>.*?</think>\s*##gs' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
         print_info "squish exit code: ${CYAN}$exit_code${NC}"
         if [ -n "$commit_message" ]; then
