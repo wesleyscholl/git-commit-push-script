@@ -279,6 +279,7 @@ if [ -n "$SQUISH_BIN" ]; then
         squish_stderr=$(cat /tmp/squish_stderr.txt 2>/dev/null)
         rm -f /tmp/squish_response.txt /tmp/squish_stderr.txt
 
+
         # Extract content from JSON robustly, then strip any CoT tags.
         # Prefer jq when available; keep a shell-only fallback.
         if command -v jq >/dev/null 2>&1; then
