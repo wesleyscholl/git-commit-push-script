@@ -4,7 +4,7 @@ source ~/.bash_profile
 # Configuration
 MAX_DIFF_CHARS=300       # ~75 input tokens — halves prefill vs 600
 TIMEOUT_SECONDS=120      # covers cold model.load_weights() (~90s) + inference
-MAX_COMMIT_LENGTH=72     # Standard git commit length
+MAX_COMMIT_LENGTH=120    # Increased — fits two-clause summaries without truncation
 
 # Squish model selection.
 # qwen3:8b INT4 (~4.5 GB) — best quality on M3 16GB, ~22 tok/s generate.
@@ -245,7 +245,7 @@ if [ -n "$SQUISH_BIN" ]; then
         # /no_think disables Qwen3 chain-of-thought so the model replies directly.
         _sys="Write a git commit message. Imperative mood, under 72 chars, no punctuation. Reply with ONLY the message."
         _usr="/no_think Files: ${changed_names}\nStat: ${stat_summary}\nDiff:\n${stripped_diff}"
-        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":100,"temperature":0.2,"stream":false,"stop":["\n","\r"]}'
+        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":150,"temperature":0.2,"stream":false,"stop":["\n","\r"]}'
 
         # Run squish — curl in background, spinner inline in foreground (no subprocess)
         print_step "Asking AI for commit message (Squish local LLM)..."
