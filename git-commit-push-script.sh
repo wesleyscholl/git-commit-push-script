@@ -295,8 +295,13 @@ if [ -n "$SQUISH_BIN" ]; then
             commit_message=${commit_message//\\u003e/>}
         fi
 
-        # Remove <think>...</think> even when it spans multiple lines.
-        commit_message=$(printf '%s' "$commit_message" | perl -0777 -pe 's#<think>.*?</think>\s*##gs' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        # Remove <think> tags/content even when partial or multiline.
+        commit_message=$(printf '%s' "$commit_message" | perl -0777 -pe 's#<think>.*?</think>\s*##gis; s#<think\b[^>]*>.*##gis; s#</think>##gis' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # If any think tag residue remains, force fallback by clearing it.
+        if printf '%s' "$commit_message" | grep -qi '</\?think\b'; then
+            commit_message=""
+        fi
 
         print_info "squish exit code: ${CYAN}$exit_code${NC}"
         if [ -n "$commit_message" ]; then
