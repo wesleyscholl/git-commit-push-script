@@ -243,7 +243,7 @@ if [ -n "$SQUISH_BIN" ]; then
 
         # Build JSON payload in pure bash — _json_str escapes all special chars
         # /no_think disables Qwen3 chain-of-thought so the model replies directly.
-        _sys="/no_think Write a single-line git commit message. Imperative mood, 50-100 characters, no punctuation at the end. Output the message text only — no quotes, no explanation, no newlines. Do not include git diff syntax like +/-. Focus on the code changes, not the file names. If the diff is empty, generate a generic message about the type of change (e.g. 'Update tests', 'Refactor code', 'Fix bug'). Do not include any content from <think> tags in the final message — those are for internal reasoning only and should be stripped from the output."
+        _sys="/no_think Write a single-line git commit message. Imperative mood, 50-100 characters, no punctuation at the end. Output the message text only — no quotes, no explanation, no newlines. Do not include git diff syntax like +/-. Focus on the code changes."
         _usr="/no_think Files: ${changed_names}\nStat: ${stat_summary}\nDiff:\n${stripped_diff}"
         PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":100,"temperature":0.2,"stream":false}'
 
