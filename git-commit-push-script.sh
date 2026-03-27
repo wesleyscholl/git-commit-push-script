@@ -243,9 +243,9 @@ if [ -n "$SQUISH_BIN" ]; then
 
         # Build JSON payload in pure bash — _json_str escapes all special chars
         # /no_think disables Qwen3 chain-of-thought so the model replies directly.
-        _sys="/no_think Write a single-line git commit message. Imperative mood, 50-75 characters, no punctuation at the end. Output the message text only — no quotes, no explanation, no newlines, no git diff syntax."
+        _sys="Write a git commit message. Imperative mood, under 72 chars, no punctuation. Reply with ONLY the message."
         _usr="/no_think Files: ${changed_names}\nStat: ${stat_summary}\nDiff:\n${stripped_diff}"
-        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":75,"temperature":0.2,"stream":false}'
+        PAYLOAD='{"model":"squish","messages":[{"role":"system","content":"'"$(_json_str "$_sys")"'"},{"role":"user","content":"'"$(_json_str "$_usr")"'"}],"max_tokens":150,"temperature":0.2,"stream":false,"stop":["\n","\r"]}'
 
         # Run squish — curl in background, spinner inline in foreground (no subprocess)
         print_step "Asking AI for commit message (Squish local LLM)..."
